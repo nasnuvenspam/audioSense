@@ -23,7 +23,7 @@ cat > /mnt/user-data/outputs/audio-trainer.html << 'HTMLEOF'
 html,body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100%;overflow:hidden;-webkit-tap-highlight-color:transparent}
 #app{
   display:flex;flex-direction:column;height:100dvh;max-width:520px;margin:0 auto;
-  -webkit-user-select: none; /* Previne seleção de texto no touch */
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -68,7 +68,6 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--sans);height:
 .btn-g{background:var(--green);color:#000}
 .btn-r{background:var(--red);color:#fff}
 .btn-x{background:var(--border);color:var(--text)}
-.btn-v{background:var(--violet);color:#000}
 .btn-sm{padding:8px 12px;font-size:10px;width:auto}
 
 /* GRID HELPERS */
@@ -525,16 +524,47 @@ hr.d{border:none;border-top:1px solid var(--border);margin:10px 0}
 
 <script>
 'use strict';
-// ═══════════════════════ AUDIO CONTEXT ═══════════════════════
-let AC = null;
-function getAC(){
-  if(!AC){ AC = new (window.AudioContext||window.webkitAudioContext)(); }
-  if(AC.state==='suspended') AC.resume();
-  document.getElementById('ctx-dot').className='dot on';
-  document.getElementById('ctx-st').textContent='ativo';
+// ═══════════════════════ CORE AUDIO SYSTEM ═══════════════════════
+let AC = null, masterAn = null, specAn = null;
+let osc = null, oscGain = null;
+let micStream = null, micSource = null, micAn = null, micActive = false, micGainNode = null;
+let synFilter = null, synMaster = null, lfoNode = null, lfoGain = null, synVoices = {};
+
+// Cria ou retorna o Contexto de Áudio e força o desbloqueio
+function getAC() {
+  if (!AC || AC.state === 'closed') { 
+    AC = new (window.AudioContext || window.webkitAudioContext)(); 
+    
+    // Unlock for iOS/Safari
+    const unlockOsc = AC.createOscillator();
+    const unlockGain = AC.createGain();
+    unlockGain.gain.value = 0;
+    unlockOsc.connect(unlockGain);
+    unlockGain.connect(AC.destination);
+    unlockOsc.start(0);
+    unlockOsc.stop(AC.currentTime + 0.1);
+  }
+  if (AC.state === 'suspended') AC.resume();
+  
+  document.getElementById('ctx-dot').className = 'dot on';
+  document.getElementById('ctx-st').textContent = 'ativo';
   return AC;
 }
-document.getElementById('spec-cvs').addEventListener('click',()=>getAC());
+
+// Garante que o Master Analyser está vivo e roteado para a saída
+function getMasterAn(c) {
+  if (!masterAn || masterAn.context !== c) {
+    masterAn = c.createAnalyser();
+    masterAn.fftSize = 512;
+    masterAn.connect(c.destination);
+    specAn = masterAn; // Conecta o gráfico de topo a este nó central
+  }
+  return masterAn;
+}
+
+// Ouve toques para despertar o áudio caso o navegador adormeça
+document.body.addEventListener('touchstart', () => { if(AC && AC.state === 'suspended') AC.resume(); }, {passive: true});
+document.body.addEventListener('mousedown', () => { if(AC && AC.state === 'suspended') AC.resume(); }, {passive: true});
 
 // ═══════════════════════ GLOBAL RESET ═══════════════════════
 async function globalAudioReset() {
@@ -543,74 +573,98 @@ async function globalAudioReset() {
   stopQTone();
   if (micActive) stopMic();
 
+  // Destrói o contexto base
   if (AC) {
     try { await AC.close(); } catch(e) {}
     AC = null; 
   }
   
+  // PURGE - Zera as referências mortas na memória para forçar a reconstrução
+  masterAn = null; 
+  specAn = null; 
+  synFilter = null; 
+  synMaster = null; 
+  lfoNode = null; 
+  lfoGain = null;
+  
   getAC();
-  FB('Sistema de áudio reiniciado', '#00FF88');
+  FB('Áudio reiniciado e cabos reconectados', '#00FF88');
 }
 
 // ═══════════════════════ HEADER SPECTRUM ═══════════════════════
 const spc = document.getElementById('spec-cvs');
 const spcCtx = spc.getContext('2d');
-let specAn = null, idleP = 0;
-function rsSpec(){
-  spc.width = spc.offsetWidth * devicePixelRatio;
-  spc.height = spc.offsetHeight * devicePixelRatio;
+let idleP = 0;
+function rsSpec() {
+  if(spc.offsetWidth > 0) {
+    spc.width = spc.offsetWidth * devicePixelRatio;
+    spc.height = spc.offsetHeight * devicePixelRatio;
+  }
 }
-rsSpec(); window.addEventListener('resize', rsSpec);
-function drawSpec(){
+window.addEventListener('resize', rsSpec);
+rsSpec();
+
+function drawSpec() {
   requestAnimationFrame(drawSpec);
-  const W=spc.offsetWidth, H=spc.offsetHeight, sc=devicePixelRatio;
-  spcCtx.clearRect(0,0,spc.width,spc.height);
-  const bars=80, bw=W/bars;
-  if(specAn){
-    const d=new Uint8Array(specAn.frequencyBinCount);
-    specAn.getByteFrequencyData(d);
-    for(let i=0;i<bars;i++){
-      const idx=Math.floor(i/bars*d.length);
-      const h=(d[idx]/255)*H;
-      const t=i/bars;
-      const r=Math.round(245-t*60), g=Math.round(166+t*50), b=35;
-      spcCtx.fillStyle=`rgba(${r},${g},${b},0.9)`;
-      spcCtx.fillRect((i*bw+1)*sc,(H-h)*sc,(bw-2)*sc,h*sc);
+  if(!spc.width) return;
+  const W = spc.offsetWidth, H = spc.offsetHeight, sc = devicePixelRatio;
+  spcCtx.clearRect(0, 0, spc.width, spc.height);
+  const bars = 80, bw = W / bars;
+  
+  // Usa um bloco try-catch para prevenir congelamento caso o nó morra durante o frame
+  try {
+    if (specAn) {
+      const d = new Uint8Array(specAn.frequencyBinCount);
+      specAn.getByteFrequencyData(d);
+      let hasSignal = false;
+      
+      for(let i=0; i<bars; i++) {
+        const idx = Math.floor(i / bars * d.length);
+        const val = d[idx];
+        if(val > 0) hasSignal = true;
+        const h = (val / 255) * H;
+        const t = i / bars;
+        const r = Math.round(245 - t*60), g = Math.round(166 + t*50), b = 35;
+        spcCtx.fillStyle = `rgba(${r},${g},${b},0.9)`;
+        spcCtx.fillRect((i*bw + 1)*sc, (H-h)*sc, (bw-2)*sc, h*sc);
+      }
+      if(!hasSignal) drawIdle(bars, bw, H, sc);
+    } else {
+      drawIdle(bars, bw, H, sc);
     }
-  } else {
-    idleP+=0.035;
-    for(let i=0;i<bars;i++){
-      const h=(Math.sin(i*.35+idleP)*.25+.3)*H*.45;
-      spcCtx.fillStyle='rgba(245,166,35,0.18)';
-      spcCtx.fillRect((i*bw+1)*sc,(H-h)*sc,(bw-2)*sc,h*sc);
-    }
+  } catch (e) {
+    drawIdle(bars, bw, H, sc); // Fallback silencioso
+  }
+}
+
+function drawIdle(bars, bw, H, sc) {
+  idleP += 0.035;
+  for(let i=0; i<bars; i++){
+    const h = (Math.sin(i*.35 + idleP)*.25 + .3) * H * .45;
+    spcCtx.fillStyle = 'rgba(245,166,35,0.18)';
+    spcCtx.fillRect((i*bw + 1)*sc, (H-h)*sc, (bw-2)*sc, h*sc);
   }
 }
 drawSpec();
 
-// ═══════════════════════ TAB SWITCHING ═══════════════════════
+// ═══════════════════════ TAB SWITCHING E UTILS ═══════════════════════
 const PANES=['tom','mic','synt','freq','adsr','ref'];
 function ST(id){
-  PANES.forEach(p=>{
-    document.getElementById('pane-'+p).classList.toggle('on',p===id);
-  });
-  document.querySelectorAll('.tb').forEach((b,i)=>{
-    b.classList.toggle('on', PANES[i]===id);
-  });
-  if(id==='adsr'){ setTimeout(()=>{ drawADSR(); },60); }
-  if(id==='synt'){ setTimeout(()=>{ buildKeyboard(); drawSynADSR(); },60); }
+  PANES.forEach(p=>{ document.getElementById('pane-'+p).classList.toggle('on', p===id); });
+  document.querySelectorAll('.tb').forEach((b,i)=>{ b.classList.toggle('on', PANES[i]===id); });
+  if(id==='adsr'){ setTimeout(()=>{ drawADSR(); }, 60); }
+  if(id==='synt'){ setTimeout(()=>{ buildKeyboard(); drawSynADSR(); }, 60); }
 }
 
 let fbT=null;
-function FB(msg,col='#F5A623'){
+function FB(msg, col='#F5A623'){
   const el=document.getElementById('fb');
   el.textContent=msg; el.style.color=col;
   el.classList.add('show');
-  clearTimeout(fbT); fbT=setTimeout(()=>el.classList.remove('show'),1600);
+  clearTimeout(fbT); fbT=setTimeout(()=>el.classList.remove('show'), 1600);
 }
 
 // ═══════════════════════ GENERATOR (TOM) ═══════════════════════
-let osc=null, oscGain=null, masterAn=null;
 let playing=false, curF=1000, curV=.6, curW='sine';
 let zLo=20, zHi=20000;
 
@@ -655,7 +709,7 @@ function UV(v){
   curV=v/100;
   document.getElementById('vpct').textContent=v+'%';
   document.getElementById('vol-bar').style.width=v+'%';
-  if(oscGain) oscGain.gain.setTargetAtTime(curV*.5,AC.currentTime,.02);
+  if(oscGain && AC) oscGain.gain.setTargetAtTime(curV*.5, AC.currentTime, .02);
 }
 
 function SW(t){
@@ -665,19 +719,23 @@ function SW(t){
   if(osc) osc.type=t;
 }
 
-function TP(){
-  if(playing) stopOsc(); else startOsc();
-}
+function TP(){ if(playing) stopOsc(); else startOsc(); }
 
 function startOsc(){
-  const c=getAC();
-  if(!masterAn){ masterAn=c.createAnalyser(); masterAn.fftSize=512; masterAn.connect(c.destination); specAn=masterAn; }
-  osc=c.createOscillator();
-  oscGain=c.createGain();
-  osc.type=curW; osc.frequency.value=curF;
-  oscGain.gain.value=curV*.5;
-  osc.connect(oscGain); oscGain.connect(masterAn);
-  osc.start(); playing=true;
+  const c = getAC();
+  const mAn = getMasterAn(c); // Puxa o analyser seguro
+  
+  osc = c.createOscillator();
+  oscGain = c.createGain();
+  osc.type = curW; 
+  osc.frequency.value = curF;
+  oscGain.gain.value = curV*.5;
+  
+  osc.connect(oscGain); 
+  oscGain.connect(mAn); // Conecta o gerador no analyser master
+  
+  osc.start(); 
+  playing = true;
   document.getElementById('pbtn').textContent='■ PARAR';
   document.getElementById('pbtn').className='btn btn-r';
 }
@@ -716,31 +774,28 @@ function f2note(f){
 document.getElementById('fsl').value=fLog(1000,20,20000);
 
 // ═══════════════════════ MIC + SPECTRUM ═══════════════════════
-let micStream=null, micSource=null, micAn=null, micActive=false;
-let micGainNode=null;
-let wfallCtx=null, wfallData=[];
+let wfallData=[];
 const WFALL_H=60;
 
-function toggleMic(){
-  if(micActive) stopMic(); else startMic();
-}
+function toggleMic(){ if(micActive) stopMic(); else startMic(); }
 
 async function startMic(){
   try{
-    const c=getAC();
-    micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
-    micSource=c.createMediaStreamSource(micStream);
-    micAn=c.createAnalyser();
-    micAn.fftSize=4096;
-    micGainNode=c.createGain(); micGainNode.gain.value=1;
+    const c = getAC();
+    micStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    micSource = c.createMediaStreamSource(micStream);
+    micAn = c.createAnalyser();
+    micAn.fftSize = 4096;
+    micGainNode = c.createGain(); 
+    micGainNode.gain.value = 1;
 
-    micSource.connect(micGainNode); micGainNode.connect(micAn);
+    micSource.connect(micGainNode); 
+    micGainNode.connect(micAn);
     
-    specAn=micAn;
-    micActive=true;
+    specAn = micAn; // Direciona o header provisoriamente para o Mic
+    micActive = true;
     document.getElementById('mic-btn').textContent='🔴 PARAR MIC';
     document.getElementById('mic-btn').className='btn btn-r';
-    document.getElementById('ctx-dot').className='dot on';
     drawMicSpec();
   } catch(e){
     FB('Microfone não autorizado','#FF3B30');
@@ -750,7 +805,8 @@ async function startMic(){
 function stopMic(){
   if(micStream) micStream.getTracks().forEach(t=>t.stop());
   micStream=null; micSource=null; micAn=null;
-  micActive=false; specAn=masterAn||null;
+  micActive=false; 
+  specAn = masterAn || null; // Restaura o analyser mestre no topo
   document.getElementById('mic-btn').textContent='🎙 ATIVAR MIC';
   document.getElementById('mic-btn').className='btn btn-g';
   document.getElementById('mic-freq').textContent='—';
@@ -766,24 +822,24 @@ const wfallEl=document.getElementById('wfall');
 const wfallCtxEl=wfallEl.getContext('2d');
 
 function resMicCvs(){
-  micSpecEl.width=micSpecEl.offsetWidth*devicePixelRatio;
-  micSpecEl.height=micSpecEl.offsetHeight*devicePixelRatio;
-  wfallEl.width=wfallEl.offsetWidth*devicePixelRatio;
-  wfallEl.height=wfallEl.offsetHeight*devicePixelRatio;
+  if(micSpecEl.offsetWidth > 0) {
+    micSpecEl.width=micSpecEl.offsetWidth*devicePixelRatio;
+    micSpecEl.height=micSpecEl.offsetHeight*devicePixelRatio;
+    wfallEl.width=wfallEl.offsetWidth*devicePixelRatio;
+    wfallEl.height=wfallEl.offsetHeight*devicePixelRatio;
+  }
 }
-window.addEventListener('resize',resMicCvs);
+window.addEventListener('resize', resMicCvs);
 setTimeout(resMicCvs,100);
 
 let micRaf=null;
 function drawMicSpec(){
-  if(!micActive)return;
-  micRaf=requestAnimationFrame(drawMicSpec);
-  if(!micAn)return;
+  if(!micActive) return;
+  micRaf = requestAnimationFrame(drawMicSpec);
+  if(!micAn || !AC) return;
 
-  const data=new Uint8Array(micAn.frequencyBinCount);
+  const data = new Uint8Array(micAn.frequencyBinCount);
   micAn.getByteFrequencyData(data);
-  const timeData=new Float32Array(micAn.frequencyBinCount);
-  micAn.getFloatFrequencyData(timeData);
 
   // RMS / dBFS
   const rms=data.reduce((s,v)=>s+(v/255)**2,0)/data.length;
@@ -796,8 +852,9 @@ function drawMicSpec(){
   for(let i=2;i<data.length;i++){
     if(data[i]>peakVal&&data[i]>80){ peakVal=data[i]; peakIdx=i; }
   }
-  const sampleRate=AC.sampleRate||44100;
-  const peakFreq=Math.round(peakIdx*sampleRate/micAn.fftSize);
+  const sampleRate = AC.sampleRate || 44100;
+  const peakFreq = Math.round(peakIdx*sampleRate/micAn.fftSize);
+  
   if(peakVal>80){
     document.getElementById('mic-freq').textContent=peakFreq>=1000?(peakFreq/1000).toFixed(2)+'k':peakFreq;
     document.getElementById('mic-note').textContent=f2note(peakFreq);
@@ -814,6 +871,7 @@ function drawMicSpec(){
 
   // Draw spectrum
   const W=micSpecEl.offsetWidth, H=micSpecEl.offsetHeight, sc=devicePixelRatio;
+  if(W===0) return;
   micSpecCtx.clearRect(0,0,micSpecEl.width,micSpecEl.height);
 
   [100,500,1000,5000,10000].forEach(f=>{
@@ -872,12 +930,7 @@ function drawMicSpec(){
 }
 
 // ═══════════════════════ SYNTHESIZER ═══════════════════════
-let synVoices={};
-let synOct=4;
-let synWave1='sine', synFType='lowpass';
-let synLFODest='pitch';
-let lfoNode=null, lfoGain=null;
-let synFilter=null, synMaster=null;
+let synOct=4, synWave1='sine', synFType='lowpass', synLFODest='pitch';
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const WHITE=[0,2,4,5,7,9,11,12,14,16,17,19,21,23];
 const BLACK=[1,3,6,8,10,13,15,18,20,22];
@@ -889,7 +942,6 @@ function buildKeyboard(){
   const kb=document.getElementById('keyboard');
   kb.innerHTML='';
   const octaves=2;
-  const totalWhite=WHITE.filter(s=>s<12).length*octaves;
   let wIdx=0;
   for(let oct=0;oct<octaves;oct++){
     WHITE.filter(s=>s<12).forEach(semi=>{
@@ -922,15 +974,36 @@ function buildKeyboard(){
 
 function setOct(d){ synOct=Math.max(1,Math.min(7,synOct+d)); document.getElementById('oct-lbl').textContent='Oct '+synOct; buildKeyboard(); }
 
+function initSynChain(c){
+  if(synFilter && synFilter.context === c) return; // Se já existe e é do contexto atual
+  
+  synFilter = c.createBiquadFilter();
+  synFilter.type = synFType;
+  synFilter.frequency.value = logF(+document.getElementById('s-cut').value,20,20000);
+  synFilter.Q.value = +document.getElementById('s-res').value;
+  
+  synMaster = c.createGain(); 
+  synMaster.gain.value = .7;
+  
+  const mAn = getMasterAn(c);
+  synFilter.connect(synMaster); 
+  synMaster.connect(mAn); // Manda para o gráfico global
+
+  lfoNode = c.createOscillator();
+  lfoGain = c.createGain();
+  lfoNode.frequency.value = +document.getElementById('lfo-rate').value;
+  lfoGain.gain.value = 0;
+  lfoNode.connect(lfoGain);
+  lfoNode.start();
+}
+
 function noteOn(midi){
   if(synVoices[midi]) return;
-  const c=getAC();
+  const c = getAC();
   initSynChain(c);
   const f=noteToFreq(midi);
-  const a=+document.getElementById('s-a').value/1000;
-  const d=+document.getElementById('s-d').value/1000;
-  const s=+document.getElementById('s-s').value/100;
-  const det=+document.getElementById('s-det').value;
+  const a=+document.getElementById('s-a').value/1000, d=+document.getElementById('s-d').value/1000;
+  const s=+document.getElementById('s-s').value/100, det=+document.getElementById('s-det').value;
   const mix=+document.getElementById('s-mix').value/100;
 
   const o1=c.createOscillator(), o2=c.createOscillator();
@@ -938,6 +1011,7 @@ function noteOn(midi){
   o1.type=synWave1; o1.frequency.value=f;
   o2.type=synWave1; o2.frequency.value=f; o2.detune.value=det;
   g1.gain.value=1-mix; g2.gain.value=mix;
+  
   o1.connect(g1); o2.connect(g2);
   g1.connect(env); g2.connect(env);
 
@@ -965,13 +1039,15 @@ function noteOn(midi){
 }
 
 function noteOff(midi){
-  const v=synVoices[midi];
-  if(!v)return;
-  const c=AC;
-  const r=+document.getElementById('s-r').value/1000;
+  const v = synVoices[midi];
+  if(!v) return;
+  const c = AC;
+  if(!c) return;
+  const r = +document.getElementById('s-r').value/1000;
   v.env.gain.cancelScheduledValues(c.currentTime);
-  v.env.gain.setValueAtTime(v.env.gain.value,c.currentTime);
-  v.env.gain.linearRampToValueAtTime(0,c.currentTime+r);
+  v.env.gain.setValueAtTime(v.env.gain.value, c.currentTime);
+  v.env.gain.linearRampToValueAtTime(0, c.currentTime+r);
+  
   setTimeout(()=>{
     try{v.o1.stop();v.o2.stop();}catch(e){}
     if(v.lfoV)try{v.lfoV.stop();}catch(e){}
@@ -980,7 +1056,6 @@ function noteOff(midi){
     if(el) el.classList.remove('on');
     updateVoiceCount();
   },(r+.05)*1000);
-  delete synVoices[midi];
 }
 
 function panicSynth(){
@@ -1000,24 +1075,6 @@ function updateVoiceCount(){
   document.getElementById('syn-dot').className='dot'+(n>0?' on':'');
 }
 
-function initSynChain(c){
-  if(synFilter) return;
-  synFilter=c.createBiquadFilter();
-  synFilter.type=synFType;
-  synFilter.frequency.value=logF(+document.getElementById('s-cut').value,20,20000);
-  synFilter.Q.value=+document.getElementById('s-res').value;
-  synMaster=c.createGain(); synMaster.gain.value=.7;
-  if(!masterAn){ masterAn=c.createAnalyser(); masterAn.fftSize=512; masterAn.connect(c.destination); specAn=masterAn; }
-  synFilter.connect(synMaster); synMaster.connect(masterAn);
-
-  lfoNode=c.createOscillator();
-  lfoGain=c.createGain();
-  lfoNode.frequency.value=+document.getElementById('lfo-rate').value;
-  lfoGain.gain.value=0;
-  lfoNode.connect(lfoGain);
-  lfoNode.start();
-}
-
 function setSO(n,t){ synWave1=t; document.querySelectorAll('[id^=so1-]').forEach(b=>b.classList.remove('on')); document.getElementById('so1-'+t).classList.add('on'); }
 function setFType(t){
   synFType=t;
@@ -1033,11 +1090,9 @@ function setLFODest(d){
 }
 
 function updateSynth(){
-  const det=+document.getElementById('s-det').value;
-  const cut=logF(+document.getElementById('s-cut').value,20,20000);
-  const res=+document.getElementById('s-res').value;
-  const lrate=+document.getElementById('lfo-rate').value;
-  const ldep=+document.getElementById('lfo-dep').value;
+  if(!AC) return;
+  const det=+document.getElementById('s-det').value, cut=logF(+document.getElementById('s-cut').value,20,20000);
+  const res=+document.getElementById('s-res').value, lrate=+document.getElementById('lfo-rate').value, ldep=+document.getElementById('lfo-dep').value;
   document.getElementById('det-v').textContent=(det>=0?'+':'')+det+'¢';
   document.getElementById('cut-v').textContent=cut>=1000?(cut/1000).toFixed(1)+'kHz':Math.round(cut)+'Hz';
   document.getElementById('res-v').textContent='Q '+res.toFixed(1);
@@ -1047,6 +1102,7 @@ function updateSynth(){
   document.getElementById('sd-v').textContent=ms(+document.getElementById('s-d').value);
   document.getElementById('ss-v').textContent=document.getElementById('s-s').value+'%';
   document.getElementById('sr-v').textContent=ms(+document.getElementById('s-r').value);
+  
   if(synFilter){
     synFilter.frequency.setTargetAtTime(cut,AC.currentTime,.02);
     synFilter.Q.setTargetAtTime(res,AC.currentTime,.02);
@@ -1067,66 +1123,44 @@ const SYNTH_PRESETS={
   lead:   {w:'sawtooth',det:10,mix:50,cut:70,res:8,a:5,d:50,s:90,r:100,lfd:'pitch',lfr:5,lfdp:25},
   pad:    {w:'sine',det:15,mix:50,cut:60,res:2,a:800,d:400,s:80,r:1500,lfd:'filter',lfr:0.5,lfdp:40},
   organ:  {w:'square',det:0,mix:50,cut:80,res:1,a:5,d:0,s:100,r:10,lfd:'off',lfr:1,lfdp:0},
-  perc:   {w:'sine',det:0,mix:0,cut:90,res:0.5,a:1,d:80,s:0,r:50,lfd:'off',lfr:1,lfdp:0},
+  perc:   {w:'sine',det:0,mix:0,cut:90,res:0.5,a:1,d:80,s:0,r:50,lfd:'off',lfr:1,lfdp:0}
 };
 
 function loadSynthPreset(p){
   const pr=SYNTH_PRESETS[p];
   setSO(1,pr.w);
-  document.getElementById('s-det').value=pr.det;
-  document.getElementById('s-mix').value=pr.mix;
-  document.getElementById('s-cut').value=pr.cut;
-  document.getElementById('s-res').value=pr.res;
-  document.getElementById('s-a').value=pr.a;
-  document.getElementById('s-d').value=pr.d;
-  document.getElementById('s-s').value=pr.s;
-  document.getElementById('s-r').value=pr.r;
-  setLFODest(pr.lfd);
-  document.getElementById('lfo-rate').value=pr.lfr;
-  document.getElementById('lfo-dep').value=pr.lfdp;
-  updateSynth(); drawSynADSR();
-  FB('Preset: '+p,'#A78BFA');
+  document.getElementById('s-det').value=pr.det; document.getElementById('s-mix').value=pr.mix;
+  document.getElementById('s-cut').value=pr.cut; document.getElementById('s-res').value=pr.res;
+  document.getElementById('s-a').value=pr.a; document.getElementById('s-d').value=pr.d;
+  document.getElementById('s-s').value=pr.s; document.getElementById('s-r').value=pr.r;
+  setLFODest(pr.lfd); document.getElementById('lfo-rate').value=pr.lfr; document.getElementById('lfo-dep').value=pr.lfdp;
+  if(AC) updateSynth(); 
+  drawSynADSR(); FB('Preset: '+p,'#A78BFA');
 }
 
 const synAdsrCvs=document.getElementById('syn-adsr-cvs');
 const synAdsrCtx=synAdsrCvs.getContext('2d');
 function drawSynADSR(){
-  synAdsrCvs.width=synAdsrCvs.offsetWidth*devicePixelRatio;
-  synAdsrCvs.height=synAdsrCvs.offsetHeight*devicePixelRatio;
-  drawADSROnCanvas(synAdsrCtx,synAdsrCvs,
-    +document.getElementById('s-a').value,
-    +document.getElementById('s-d').value,
-    +document.getElementById('s-s').value/100,
-    +document.getElementById('s-r').value
-  );
+  if(synAdsrCvs.offsetWidth > 0) {
+    synAdsrCvs.width=synAdsrCvs.offsetWidth*devicePixelRatio;
+    synAdsrCvs.height=synAdsrCvs.offsetHeight*devicePixelRatio;
+    drawADSROnCanvas(synAdsrCtx,synAdsrCvs, +document.getElementById('s-a').value, +document.getElementById('s-d').value, +document.getElementById('s-s').value/100, +document.getElementById('s-r').value);
+  }
 }
 
 // ═══════════════════════ FREQ QUIZ ═══════════════════════
 const BANDS=[
-  {l:'Sub (20–60 Hz)',lo:20,hi:60},
-  {l:'Grave (60–120 Hz)',lo:60,hi:120},
-  {l:'Grave-Méd (120–250)',lo:120,hi:250},
-  {l:'Boxy/Mud (250–500)',lo:250,hi:500},
-  {l:'Nasal (500Hz–1k)',lo:500,hi:1000},
-  {l:'Mordida (1–2 kHz)',lo:1000,hi:2000},
-  {l:'Presença (2–5 kHz)',lo:2000,hi:5000},
-  {l:'Sibilância (5–10k)',lo:5000,hi:10000},
-  {l:'Brilho/Ar (10–20k)',lo:10000,hi:20000}
+  {l:'Sub (20–60 Hz)',lo:20,hi:60}, {l:'Grave (60–120 Hz)',lo:60,hi:120},
+  {l:'Grave-Méd (120–250)',lo:120,hi:250}, {l:'Boxy/Mud (250–500)',lo:250,hi:500},
+  {l:'Nasal (500Hz–1k)',lo:500,hi:1000}, {l:'Mordida (1–2 kHz)',lo:1000,hi:2000},
+  {l:'Presença (2–5 kHz)',lo:2000,hi:5000}, {l:'Sibilância (5–10k)',lo:5000,hi:10000}, {l:'Brilho/Ar (10–20k)',lo:10000,hi:20000}
 ];
-let qMode='id', qRange='full';
-let qF=0, qCorr=0, scR=0, scT=0, qStreak=[];
-let qOsc=null, qGain=null;
-let sessionLog=[];
+let qMode='id', qRange='full', qF=0, qCorr=0, scR=0, scT=0, qStreak=[];
+let qOsc=null, qGain=null, sessionLog=[];
 
 function setQMode(m){ qMode=m; document.querySelectorAll('[id^=qm-]').forEach(b=>b.classList.remove('on')); document.getElementById('qm-'+m).classList.add('on'); qNext(); }
 function setQRange(r){ qRange=r; document.querySelectorAll('[id^=qr-]').forEach(b=>b.classList.remove('on')); document.getElementById('qr-'+r).classList.add('on'); qNext(); }
-
-function getActiveBands(){
-  const ranges={full:[20,20000],mid:[200,8000],fb:[500,1000],hi:[2000,20000]};
-  const [lo,hi]=ranges[qRange]||[20,20000];
-  return BANDS.filter(b=>b.hi>lo&&b.lo<hi);
-}
-
+function getActiveBands(){ const ranges={full:[20,20000],mid:[200,8000],fb:[500,1000],hi:[2000,20000]}; const [lo,hi]=ranges[qRange]||[20,20000]; return BANDS.filter(b=>b.hi>lo&&b.lo<hi); }
 function randLogF(lo,hi){ return Math.round(Math.pow(10,Math.log10(lo)+Math.random()*(Math.log10(hi)-Math.log10(lo)))); }
 
 function qNext(){
@@ -1134,14 +1168,12 @@ function qNext(){
   const bands=getActiveBands();
   if(bands.length<2)return;
   qCorr=Math.floor(Math.random()*bands.length);
-  const band=bands[qCorr];
-  qF=randLogF(band.lo,band.hi);
+  qF=randLogF(bands[qCorr].lo, bands[qCorr].hi);
 
   let opts=new Set([qCorr]);
   while(opts.size<Math.min(4,bands.length)) opts.add(Math.floor(Math.random()*bands.length));
   opts=Array.from(opts).sort(()=>Math.random()-.5);
 
-  document.getElementById('q-instr').textContent='Ouça o tom e identifique a faixa:';
   const container=document.getElementById('q-opts');
   container.innerHTML='';
   opts.forEach(idx=>{
@@ -1150,22 +1182,25 @@ function qNext(){
     b.onclick=()=>qAnswer(idx===qCorr,b,opts,bands,qCorr,container);
     container.appendChild(b);
   });
-  document.getElementById('q-play').onclick=qPlay;
+  document.getElementById('q-play').onclick = () => playShortTone(qF, 1.5);
 }
 
-function qPlay(){ playShortTone(qF,1.5); }
-
-function playShortTone(f,dur=1.2){
+function playShortTone(f, dur=1.2){
   stopQTone();
-  const c=getAC();
-  qOsc=c.createOscillator(); qGain=c.createGain();
-  qOsc.frequency.value=f; qOsc.type='sine';
-  qGain.gain.setValueAtTime(0,c.currentTime);
-  qGain.gain.linearRampToValueAtTime(.4,c.currentTime+.03);
-  qGain.gain.setValueAtTime(.4,c.currentTime+dur-.1);
-  qGain.gain.linearRampToValueAtTime(0,c.currentTime+dur);
-  qOsc.connect(qGain); qGain.connect(c.destination);
-  qOsc.start(); qOsc.stop(c.currentTime+dur+.05);
+  const c = getAC();
+  const mAn = getMasterAn(c); // Puxa o analyser seguro para exibir no topo
+  
+  qOsc = c.createOscillator(); qGain = c.createGain();
+  qOsc.frequency.value = f; qOsc.type = 'sine';
+  qGain.gain.setValueAtTime(0, c.currentTime);
+  qGain.gain.linearRampToValueAtTime(.4, c.currentTime + .03);
+  qGain.gain.setValueAtTime(.4, c.currentTime + dur - .1);
+  qGain.gain.linearRampToValueAtTime(0, c.currentTime + dur);
+  
+  qOsc.connect(qGain); 
+  qGain.connect(mAn); // Conecta no master gráfico
+  qOsc.start(); 
+  qOsc.stop(c.currentTime + dur + .05);
 }
 
 function stopQTone(){ if(qOsc){try{qOsc.stop();}catch(e){} qOsc=null;} }
@@ -1174,120 +1209,75 @@ function qAnswer(correct, btn, opts, bands, corrIdx, container){
   scT++; qStreak.push(correct);
   if(qStreak.length>10) qStreak.shift();
   if(correct){ scR++; btn.classList.add('ok'); FB('✓ Correto!','#00FF88'); }
-  else{
-    btn.classList.add('ng');
-    const btns=container.querySelectorAll('.opt');
-    btns.forEach((b,i)=>{ if(opts[i]===corrIdx) b.classList.add('ok'); });
-    FB('✗ Errado','#FF3B30');
-  }
-  sessionLog.push({ts:new Date().toISOString(),freq:qF,correct,band:bands[corrIdx].l});
-  document.getElementById('sc-r').textContent=scR;
-  document.getElementById('sc-t').textContent=scT;
-  document.getElementById('sc-p').textContent=Math.round(scR/scT*100)+'%';
+  else{ btn.classList.add('ng'); container.querySelectorAll('.opt').forEach((b,i)=>{ if(opts[i]===corrIdx) b.classList.add('ok'); }); FB('✗ Errado','#FF3B30'); }
+  
+  sessionLog.push({ts:new Date().toISOString(), freq:qF, correct, band:bands[corrIdx].l});
+  document.getElementById('sc-r').textContent=scR; document.getElementById('sc-t').textContent=scT; document.getElementById('sc-p').textContent=Math.round(scR/scT*100)+'%';
   document.getElementById('streak-row').innerHTML=qStreak.map(h=>`<span class="pip ${h?'h':'m'}"></span>`).join('');
-  const logEl=document.getElementById('session-log');
-  logEl.textContent=sessionLog.slice(-5).map(e=>`${e.correct?'✓':'✗'} ${e.freq}Hz — ${e.band}`).join('\n');
+  document.getElementById('session-log').textContent=sessionLog.slice(-5).map(e=>`${e.correct?'✓':'✗'} ${e.freq}Hz — ${e.band}`).join('\n');
   container.querySelectorAll('.opt').forEach(b=>b.style.pointerEvents='none');
-  setTimeout(qNext,1800);
+  setTimeout(qNext, 1800);
 }
 
 function resetScore(){ scR=0;scT=0;qStreak=[];sessionLog=[]; document.getElementById('sc-r').textContent=0; document.getElementById('sc-t').textContent=0; document.getElementById('sc-p').textContent='—'; document.getElementById('streak-row').innerHTML=''; document.getElementById('session-log').textContent=''; qNext(); }
-
 function exportSession(){
   const blob=new Blob([JSON.stringify({date:new Date().toISOString(),score:{right:scR,total:scT,pct:scT?Math.round(scR/scT*100):0},log:sessionLog},null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='audiosense-session.json'; a.click();
 }
-
 qNext();
 
 // ═══════════════════════ ADSR LIVRE ═══════════════════════
-const ADSR_PRESETS={
-  pluck:   {a:1,d:200,s:0,r:100,name:'Pizzicato'},
-  pad:     {a:800,d:400,s:80,r:1200,name:'Pad suave'},
-  piano:   {a:5,d:300,s:60,r:800,name:'Piano'},
-  perc:    {a:1,d:80,s:0,r:50,name:'Percussão'},
-  organ:   {a:10,d:0,s:100,r:10,name:'Órgão'},
-  strings: {a:600,d:200,s:90,r:1500,name:'Cordas'},
-};
+const ADSR_PRESETS={ pluck:{a:1,d:200,s:0,r:100,name:'Pizzicato'}, pad:{a:800,d:400,s:80,r:1200,name:'Pad suave'}, piano:{a:5,d:300,s:60,r:800,name:'Piano'}, perc:{a:1,d:80,s:0,r:50,name:'Percussão'}, organ:{a:10,d:0,s:100,r:10,name:'Órgão'}, strings:{a:600,d:200,s:90,r:1500,name:'Cordas'} };
 
 function drawADSROnCanvas(ctx2, cvs, a, d, s, r){
   const W=cvs.offsetWidth, H=cvs.offsetHeight, sc=devicePixelRatio;
   ctx2.clearRect(0,0,cvs.width,cvs.height);
-  const pad={l:6*sc,r:6*sc,t:6*sc,b:16*sc};
-  const cW=cvs.width-pad.l-pad.r, cH=cvs.height-pad.t-pad.b;
-  const total=a+d+500+r;
-  const tX=ms2=>pad.l+(ms2/total)*cW;
-  const aY=amp=>pad.t+(1-amp)*cH;
+  const pad={l:6*sc,r:6*sc,t:6*sc,b:16*sc}; const cW=cvs.width-pad.l-pad.r, cH=cvs.height-pad.t-pad.b; const total=a+d+500+r;
+  const tX=ms2=>pad.l+(ms2/total)*cW; const aY=amp=>pad.t+(1-amp)*cH;
   const pts=[[0,0],[a,1],[a+d,s],[a+d+500,s],[a+d+500+r,0]];
-  ctx2.beginPath();
-  ctx2.moveTo(tX(0),aY(0));
-  pts.forEach(([t,a2])=>ctx2.lineTo(tX(t),aY(a2)));
-  ctx2.fillStyle='rgba(245,166,35,0.1)';
-  ctx2.fill();
-  ctx2.beginPath();
-  ctx2.moveTo(tX(0),aY(0));
-  pts.forEach(([t,a2])=>ctx2.lineTo(tX(t),aY(a2)));
+  ctx2.beginPath(); ctx2.moveTo(tX(0),aY(0)); pts.forEach(([t,a2])=>ctx2.lineTo(tX(t),aY(a2)));
+  ctx2.fillStyle='rgba(245,166,35,0.1)'; ctx2.fill();
+  ctx2.beginPath(); ctx2.moveTo(tX(0),aY(0)); pts.forEach(([t,a2])=>ctx2.lineTo(tX(t),aY(a2)));
   ctx2.strokeStyle='#F5A623'; ctx2.lineWidth=2*sc; ctx2.stroke();
-  ctx2.fillStyle='rgba(90,90,120,.8)'; ctx2.font=`${8*sc}px JetBrains Mono`;
-  ctx2.textAlign='center';
-  [['A',a/2],['D',a+d/2],['S',a+d+250],['R',a+d+500+r/2]].forEach(([l,t])=>{
-    ctx2.fillText(l,tX(t),aY(0)+11*sc);
-  });
+  ctx2.fillStyle='rgba(90,90,120,.8)'; ctx2.font=`${8*sc}px JetBrains Mono`; ctx2.textAlign='center';
+  [['A',a/2],['D',a+d/2],['S',a+d+250],['R',a+d+500+r/2]].forEach(([l,t])=>ctx2.fillText(l,tX(t),aY(0)+11*sc));
 }
 
 const adsrCvs=document.getElementById('adsr-cvs');
 const adsrCtx2=adsrCvs.getContext('2d');
 function drawADSR(){
-  adsrCvs.width=adsrCvs.offsetWidth*devicePixelRatio;
-  adsrCvs.height=adsrCvs.offsetHeight*devicePixelRatio;
-  const a=+document.getElementById('ad-a').value;
-  const d=+document.getElementById('ad-d').value;
-  const s=+document.getElementById('ad-s').value/100;
-  const r=+document.getElementById('ad-r').value;
-  document.getElementById('ad-a-v').textContent=ms(a);
-  document.getElementById('ad-d-v').textContent=ms(d);
-  document.getElementById('ad-s-v').textContent=Math.round(s*100)+'%';
-  document.getElementById('ad-r-v').textContent=ms(r);
-  drawADSROnCanvas(adsrCtx2,adsrCvs,a,d,s,r);
+  if(adsrCvs.offsetWidth > 0) {
+    adsrCvs.width=adsrCvs.offsetWidth*devicePixelRatio; adsrCvs.height=adsrCvs.offsetHeight*devicePixelRatio;
+    const a=+document.getElementById('ad-a').value, d=+document.getElementById('ad-d').value, s=+document.getElementById('ad-s').value/100, r=+document.getElementById('ad-r').value;
+    document.getElementById('ad-a-v').textContent=ms(a); document.getElementById('ad-d-v').textContent=ms(d);
+    document.getElementById('ad-s-v').textContent=Math.round(s*100)+'%'; document.getElementById('ad-r-v').textContent=ms(r);
+    drawADSROnCanvas(adsrCtx2,adsrCvs,a,d,s,r);
+  }
 }
 
 function loadAdsr(p){
   const pr=ADSR_PRESETS[p];
-  document.getElementById('ad-a').value=pr.a;
-  document.getElementById('ad-d').value=pr.d;
-  document.getElementById('ad-s').value=pr.s;
-  document.getElementById('ad-r').value=pr.r;
-  drawADSR();
+  document.getElementById('ad-a').value=pr.a; document.getElementById('ad-d').value=pr.d; document.getElementById('ad-s').value=pr.s; document.getElementById('ad-r').value=pr.r; drawADSR();
 }
 
 function playADSR(){
-  const c=getAC();
-  const a=+document.getElementById('ad-a').value/1000;
-  const d=+document.getElementById('ad-d').value/1000;
-  const s=+document.getElementById('ad-s').value/100;
-  const r=+document.getElementById('ad-r').value/1000;
-  const st=.5;
+  const c = getAC();
+  const mAn = getMasterAn(c); // Master router
+  const a=+document.getElementById('ad-a').value/1000, d=+document.getElementById('ad-d').value/1000, s=+document.getElementById('ad-s').value/100, r=+document.getElementById('ad-r').value/1000, st=.5;
   const o=c.createOscillator(), g=c.createGain();
   o.type=curW; o.frequency.value=curF;
   const now=c.currentTime;
-  g.gain.setValueAtTime(0,now);
-  g.gain.linearRampToValueAtTime(.5,now+a);
-  g.gain.linearRampToValueAtTime(s*.5,now+a+d);
-  g.gain.setValueAtTime(s*.5,now+a+d+st);
-  g.gain.linearRampToValueAtTime(0,now+a+d+st+r);
-  o.connect(g); g.connect(c.destination);
+  g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(.5,now+a); g.gain.linearRampToValueAtTime(s*.5,now+a+d); g.gain.setValueAtTime(s*.5,now+a+d+st); g.gain.linearRampToValueAtTime(0,now+a+d+st+r);
+  
+  o.connect(g); 
+  g.connect(mAn); // Saída para o analyser central
   o.start(now); o.stop(now+a+d+st+r+.05);
 }
 
 // ═══════════════════════ INIT ═══════════════════════
 setTimeout(()=>{ drawADSR(); drawSynADSR(); buildKeyboard(); },200);
-window.addEventListener('resize',()=>{
-  rsSpec(); resMicCvs();
-  setTimeout(()=>{ drawADSR(); drawSynADSR(); },80);
-});
-
-// prevent scroll on key touch
-document.getElementById('keyboard').addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+window.addEventListener('resize',()=>{ setTimeout(()=>{ drawADSR(); drawSynADSR(); },80); });
+document.getElementById('keyboard').addEventListener('touchmove', e=>e.preventDefault(), {passive:false});
 </script>
 </body>
 </html>
