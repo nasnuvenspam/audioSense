@@ -21,7 +21,11 @@ cat > /mnt/user-data/outputs/audio-trainer.html << 'HTMLEOF'
   --r:10px;
 }
 html,body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100%;overflow:hidden;-webkit-tap-highlight-color:transparent}
-#app{display:flex;flex-direction:column;height:100dvh;max-width:520px;margin:0 auto}
+#app{
+  display:flex;flex-direction:column;height:100dvh;max-width:520px;margin:0 auto;
+  -webkit-user-select: none; /* Previne seleção de texto no touch */
+  user-select: none;
+}
 
 /* HEADER */
 #hdr{flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);padding:10px 14px 0}
@@ -75,15 +79,19 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--sans);height:
 
 /* CHIP BUTTONS */
 .chip{padding:8px 7px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--muted2);font-family:var(--mono);font-size:9px;cursor:pointer;text-align:center;transition:all .15s;line-height:1.4}
-.chip:hover,.chip.on{border-color:var(--amber);color:var(--amber);background:var(--amber-glow)}
 .chip.on-g{border-color:var(--green);color:var(--green);background:rgba(0,255,136,.07)}
 .chip-xs{font-size:8px;padding:6px 5px}
 
 /* OPTION BUTTONS (quiz) */
-.opt{padding:13px 8px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
-.opt:hover{border-color:var(--blue);color:var(--blue)}
+.opt{padding:13px 4px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:10px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
 .opt.ok{border-color:var(--green);color:var(--green);background:rgba(0,255,136,.07)}
 .opt.ng{border-color:var(--red);color:var(--red);background:rgba(255,59,48,.07)}
+
+@media (hover: hover) {
+  .chip:hover { border-color:var(--amber); color:var(--amber); background:var(--amber-glow) }
+  .opt:hover { border-color:var(--blue); color:var(--blue) }
+}
+.chip.on { border-color:var(--amber); color:var(--amber); background:var(--amber-glow) }
 
 /* INDICATOR */
 .dot{width:7px;height:7px;border-radius:50%;background:var(--border);transition:background .2s;flex-shrink:0}
@@ -134,51 +142,38 @@ hr.d{border:none;border-top:1px solid var(--border);margin:10px 0}
 #peak-alert{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;padding:7px 12px;background:rgba(255,59,48,.15);border:1px solid var(--red);border-radius:6px;color:var(--red);text-align:center;display:none;margin-bottom:8px}
 #peak-alert.show{display:block}
 
-/* COMP meters */
-.comp-met{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px}
-.met-cell{text-align:center;background:var(--surface);border-radius:6px;padding:8px 4px}
-.met-l{font-family:var(--mono);font-size:7px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px}
-.met-v{font-family:var(--mono);font-size:16px;font-weight:700}
-.mv-g{color:var(--green)}.mv-a{color:var(--amber)}.mv-r{color:var(--red)}
-
 /* EXPORT */
 .export-row{display:flex;gap:7px;margin-bottom:10px}
-
-/* ADSR quiz */
-.adsr-q-display{text-align:center;padding:12px 0}
-.adsr-q-name{font-family:var(--mono);font-size:28px;font-weight:700;color:var(--amber)}
 </style>
 </head>
 <body>
 <div id="app">
 
-<!-- HEADER -->
 <div id="hdr">
   <div class="hdr-row">
     <div>
       <h1>AudioSense <span style="color:var(--muted);font-weight:400">/ Villa-Lobos</span></h1>
       <div class="hdr-sub">DIAGNÓSTICO · TREINAMENTO · SÍNTESE</div>
     </div>
-    <div class="ind"><span class="dot" id="ctx-dot"></span><span id="ctx-st" style="font-size:8px">offline</span></div>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button class="btn btn-x btn-sm" onclick="globalAudioReset()" style="padding:4px 8px; font-size:8px; border-radius:4px;">⚡ RESET</button>
+      <div class="ind"><span class="dot" id="ctx-dot"></span><span id="ctx-st" style="font-size:8px">offline</span></div>
+    </div>
   </div>
   <canvas id="spec-cvs" title="Clique para ativar áudio"></canvas>
 </div>
 
-<!-- TABS -->
 <div id="tabs">
   <button class="tb on"  onclick="ST('tom')">TOM</button>
   <button class="tb"     onclick="ST('mic')">MIC</button>
   <button class="tb"     onclick="ST('synt')">SINT</button>
   <button class="tb"     onclick="ST('freq')">FREQ</button>
   <button class="tb"     onclick="ST('adsr')">ADSR</button>
-  <button class="tb"     onclick="ST('comp')">COMP</button>
   <button class="tb"     onclick="ST('ref')">REF</button>
 </div>
 
-<!-- CONTENT -->
 <div id="cnt">
 
-<!-- ══════════════════════════════════ TOM ══ -->
 <div id="pane-tom" class="pane on">
   <div class="card">
     <div class="clabel">Frequência</div>
@@ -239,7 +234,6 @@ hr.d{border:none;border-top:1px solid var(--border);margin:10px 0}
   </div>
 </div>
 
-<!-- ══════════════════════════════════ MIC ══ -->
 <div id="pane-mic" class="pane">
   <div id="peak-alert">⚠ PICO DETECTADO — possível retroalimentação</div>
 
@@ -250,10 +244,7 @@ hr.d{border:none;border-top:1px solid var(--border);margin:10px 0}
       <div style="margin-top:6px"><span class="mic-db" id="mic-db">— dBFS</span></div>
     </div>
     <div class="vu-wrap" style="height:8px;margin:8px 0"><div class="vu-bar" id="mic-vu"></div></div>
-    <div class="g2" style="margin-top:8px">
-      <button class="btn btn-g" id="mic-btn" onclick="toggleMic()">🎙 ATIVAR MIC</button>
-      <button class="btn btn-x" onclick="toggleMicComp()">⚙ COMP: <span id="mc-st">OFF</span></button>
-    </div>
+    <button class="btn btn-g" id="mic-btn" onclick="toggleMic()" style="margin-top:8px">🎙 ATIVAR MIC</button>
   </div>
 
   <div class="card">
@@ -270,57 +261,14 @@ hr.d{border:none;border-top:1px solid var(--border);margin:10px 0}
     <div class="clabel">Waterfall (histórico espectral)</div>
     <canvas id="wfall" class="cvs-box" height="100"></canvas>
   </div>
-
-  <div class="card">
-    <div class="clabel">Compressor de microfone</div>
-    <div class="g2">
-      <div>
-        <div class="clabel2">Threshold</div>
-        <input type="range" class="ri" id="mc-thr" min="-60" max="0" step="1" value="-24" oninput="updateMicComp()">
-        <div class="rlabs"><span>−60</span><span id="mc-thr-v">−24 dB</span></div>
-      </div>
-      <div>
-        <div class="clabel2">Ratio</div>
-        <input type="range" class="ri" id="mc-rat" min="1" max="20" step="0.5" value="4" oninput="updateMicComp()">
-        <div class="rlabs"><span>1:1</span><span id="mc-rat-v">4:1</span></div>
-      </div>
-      <div>
-        <div class="clabel2">Attack</div>
-        <input type="range" class="ri" id="mc-atk" min="0" max="1" step="0.001" value="0.003" oninput="updateMicComp()">
-        <div class="rlabs"><span>0ms</span><span id="mc-atk-v">3ms</span></div>
-      </div>
-      <div>
-        <div class="clabel2">Release</div>
-        <input type="range" class="ri" id="mc-rel" min="0" max="1" step="0.01" value="0.25" oninput="updateMicComp()">
-        <div class="rlabs"><span>0ms</span><span id="mc-rel-v">250ms</span></div>
-      </div>
-      <div>
-        <div class="clabel2">Knee</div>
-        <input type="range" class="ri" id="mc-kne" min="0" max="20" step="1" value="6" oninput="updateMicComp()">
-        <div class="rlabs"><span>0</span><span id="mc-kne-v">6 dB</span></div>
-      </div>
-      <div>
-        <div class="clabel2">Make-up</div>
-        <input type="range" class="ri" id="mc-mku" min="0" max="24" step="0.5" value="6" oninput="updateMicComp()">
-        <div class="rlabs"><span>0</span><span id="mc-mku-v">+6 dB</span></div>
-      </div>
-    </div>
-    <div class="comp-met">
-      <div class="met-cell"><div class="met-l">GR</div><div class="met-v mv-r" id="mc-gr">0.0 dB</div></div>
-      <div class="met-cell"><div class="met-l">In</div><div class="met-v mv-a" id="mc-in">— dB</div></div>
-      <div class="met-cell"><div class="met-l">Out</div><div class="met-v mv-g" id="mc-out">— dB</div></div>
-    </div>
-  </div>
 </div>
 
-<!-- ══════════════════════════════════ SINTETIZADOR ══ -->
 <div id="pane-synt" class="pane">
   <div class="card">
     <div class="row" style="margin-bottom:8px;justify-content:space-between">
       <div class="clabel" style="margin:0">Sintetizador polifônico</div>
       <button class="btn btn-r btn-sm" onclick="panicSynth()">PANIC</button>
     </div>
-    <!-- keyboard -->
     <div id="kbd-wrap"><div id="keyboard"></div></div>
     <div class="row" style="margin-top:8px;gap:8px">
       <div class="ind"><span class="dot" id="syn-dot"></span><span id="syn-voices">0 vozes</span></div>
@@ -439,7 +387,6 @@ hr.d{border:none;border-top:1px solid var(--border);margin:10px 0}
   </div>
 </div>
 
-<!-- ══════════════════════════════════ FREQ TREINO ══ -->
 <div id="pane-freq" class="pane">
   <div class="card">
     <div class="row" style="justify-content:space-between;margin-bottom:6px">
@@ -484,24 +431,7 @@ hr.d{border:none;border-top:1px solid var(--border);margin:10px 0}
   </div>
 </div>
 
-<!-- ══════════════════════════════════ ADSR TREINO ══ -->
 <div id="pane-adsr" class="pane">
-  <div class="card">
-    <div class="clabel">Treino de envelope — Adivinhe o preset</div>
-    <div class="row" style="justify-content:space-between;margin-bottom:4px">
-      <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--green)">
-        <span id="adsr-sc-r">0</span>/<span id="adsr-sc-t">0</span>
-      </div>
-      <div id="adsr-streak" style="min-height:14px"></div>
-    </div>
-  </div>
-  <div class="card">
-    <canvas id="adsr-q-cvs" class="cvs-box" height="90" style="margin-bottom:10px"></canvas>
-    <div class="clabel2" id="adsr-q-hint">Pressione OUVIR para começar</div>
-    <button class="btn btn-a" onclick="adsrQPlay()" style="margin-bottom:10px">▶ OUVIR ENVELOPE</button>
-    <div class="g2" id="adsr-opts"></div>
-    <button class="btn btn-x" style="margin-top:8px;font-size:9px" onclick="adsrNextQ()">PRÓXIMA →</button>
-  </div>
   <div class="card">
     <div class="clabel">Visualizador ADSR livre</div>
     <canvas id="adsr-cvs" class="cvs-box" height="100" style="margin-bottom:10px"></canvas>
@@ -533,103 +463,65 @@ hr.d{border:none;border-top:1px solid var(--border);margin:10px 0}
   </div>
 </div>
 
-<!-- ══════════════════════════════════ COMP ══ -->
-<div id="pane-comp" class="pane">
-  <div class="card">
-    <div class="clabel">Curva de transferência</div>
-    <canvas id="comp-cvs" class="cvs-box" height="140" style="margin-bottom:8px"></canvas>
-    <div class="comp-met">
-      <div class="met-cell"><div class="met-l">Gain Red.</div><div class="met-v mv-r" id="c-gr">0.0 dB</div></div>
-      <div class="met-cell"><div class="met-l">In</div><div class="met-v mv-a" id="c-in">—</div></div>
-      <div class="met-cell"><div class="met-l">Out</div><div class="met-v mv-g" id="c-out">—</div></div>
-    </div>
-  </div>
-  <div class="card">
-    <div class="g2">
-      <div><div class="clabel2">Threshold</div>
-        <input type="range" class="ri" id="c-thr" min="-60" max="0" step="1" value="-18" oninput="drawComp()">
-        <div class="rlabs"><span>−60</span><span id="cv-thr">−18 dB</span></div></div>
-      <div><div class="clabel2">Ratio</div>
-        <input type="range" class="ri" id="c-rat" min="1" max="20" step="0.5" value="4" oninput="drawComp()">
-        <div class="rlabs"><span>1:1</span><span id="cv-rat">4:1</span></div></div>
-      <div><div class="clabel2">Attack</div>
-        <input type="range" class="ri" id="c-atk" min="0" max="1" step="0.001" value="0.003" oninput="drawComp()">
-        <div class="rlabs"><span>0ms</span><span id="cv-atk">3ms</span></div></div>
-      <div><div class="clabel2">Release</div>
-        <input type="range" class="ri" id="c-rel" min="0" max="1" step="0.01" value="0.25" oninput="drawComp()">
-        <div class="rlabs"><span>0ms</span><span id="cv-rel">250ms</span></div></div>
-      <div><div class="clabel2">Knee</div>
-        <input type="range" class="ri" id="c-kne" min="0" max="20" step="1" value="6" oninput="drawComp()">
-        <div class="rlabs"><span>0</span><span id="cv-kne">6 dB</span></div></div>
-      <div><div class="clabel2">Make-up</div>
-        <input type="range" class="ri" id="c-mku" min="0" max="24" step="0.5" value="6" oninput="drawComp()">
-        <div class="rlabs"><span>0</span><span id="cv-mku">+6 dB</span></div></div>
-    </div>
-  </div>
-  <button class="btn btn-g" onclick="testComp()" style="margin-bottom:10px">▶ OUVIR COMPRESSÃO</button>
-  <div class="card">
-    <div class="clabel2">Presets</div>
-    <div class="g2">
-      <button class="chip" onclick="loadComp('vocal')">Vocal</button>
-      <button class="chip" onclick="loadComp('drum')">Bateria</button>
-      <button class="chip" onclick="loadComp('limit')">Limiter</button>
-      <button class="chip" onclick="loadComp('gentle')">Suave</button>
-    </div>
-  </div>
-  <div class="card">
-    <div class="info">
-      <b>Threshold</b> — nível a partir do qual a compressão atua.<br>
-      <b>Ratio</b> — intensidade: 4:1 significa 4 dB de entrada → 1 dB de saída acima do threshold.<br>
-      <b>Attack</b> — velocidade de reação ao sinal.<br>
-      <b>Release</b> — velocidade de recuperação após o sinal cair.<br>
-      <b>Knee</b> — suavidade na curva (soft knee = transição gradual).<br>
-      <b>Make-up gain</b> — compensa o volume reduzido pela compressão.
-    </div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════ REF ══ -->
 <div id="pane-ref" class="pane">
   <div class="card">
-    <div class="clabel">Mapa de frequências — palco ao vivo</div>
+    <div class="clabel">Mapa de Frequências (PA / Palco)</div>
     <div class="info">
-      <b>20–60 Hz</b> — Sub-grave. Sensação física, rumble, bumbo e contrabaixo.<br><br>
-      <b>60–200 Hz</b> — Grave. Corpo do baixo. Excesso → "lamacento".<br><br>
-      <b>200–500 Hz</b> — Médio-grave. Calor ou breu. Frequente em palcos fechados.<br><br>
-      <b>500 Hz–2 kHz</b> — Médio. Inteligibilidade vocal. Zona de feedback comum.<br><br>
-      <b style="color:var(--red)">630–670 Hz</b> — <b style="color:var(--red)">Zona de feedback frequente em microfones dinâmicos em palco fechado.</b><br><br>
-      <b>2–5 kHz</b> — Presença, ataque, articulação. Excessos fatigam o ouvido.<br><br>
-      <b>5–10 kHz</b> — Brilho, sibilância. Feedback de condensadores.<br><br>
-      <b>10–20 kHz</b> — Ar. Shimmer, detalhe de pratos.
+      <b>20–60 Hz</b> — Sub-grave. Sensação física, rumble, peso do bumbo.<br><br>
+      <b>60–120 Hz</b> — Grave. Corpo do baixo e bumbo. Ponto de HPF (High-Pass).<br><br>
+      <b>120–250 Hz</b> — Médio-grave. Calor. Excesso causa som "lamacento" (mud).<br><br>
+      <b>250–500 Hz</b> — Médio-baixo. Som "encaxotado" (boxy).<br><br>
+      <b>500 Hz–1 kHz</b> — Médio central. Inteligibilidade vocal, tom anasalado.<br><br>
+      <b style="color:var(--red)">630–670 Hz</b> — <b style="color:var(--red)">Zona crítica de feedback em microfones dinâmicos de palco.</b><br><br>
+      <b>1–2 kHz</b> — Ataque, mordida de guitarras e caixas.<br><br>
+      <b>2–5 kHz</b> — Presença. Área de maior sensibilidade auditiva (fadiga).<br><br>
+      <b>5–10 kHz</b> — Sibilância (fricativas da voz), brilho de pratos.<br><br>
+      <b>10–20 kHz</b> — Ar. Detalhe super-agudo, shimmer.
     </div>
   </div>
+  
   <div class="card">
-    <div class="clabel">Espectromorfologia — conceitos</div>
+    <div class="clabel">Estrutura de Ganhos (Gain Staging)</div>
+    <div class="info">
+      <b>Alvo Nominal (-18 dBFS):</b> Padrão ótimo de gravação no Pro Tools, Reaper ou Ableton, garantindo *headroom* ideal para plugins que simulam equipamento analógico (onde -18 dBFS ≈ 0 VU ≈ +4 dBu).<br><br>
+      <b>Headroom:</b> Margem de segurança entre o nível nominal e o clipe (0 dBFS digital). Evita distorções em transientes (picos de percussão).<br><br>
+      <b>Piso de Ruído (Noise Floor):</b> Manter o ganho robusto (sem clipar) maximiza a relação sinal-ruído (SNR), afastando o som útil do chiado térmico dos pré-amplificadores.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="clabel">Padrões Polares (Microfones)</div>
+    <div class="info">
+      <b>Cardioide:</b> Captação frontal. Máxima rejeição a 180° (traseira do mic). Ideal colocar o monitor de chão diretamente atrás do pedestal.<br><br>
+      <b>Supercardioide:</b> Foco frontal mais estreito. Apresenta um pequeno lóbulo traseiro de captação. A rejeição máxima ocorre aos 126° (nas diagonais traseiras). Posicione os monitores nessas diagonais, e nunca retinho atrás do mic.<br><br>
+      <b>Omnidirecional:</b> Captação 360°. Alta fidelidade nos graves (sem efeito de proximidade), mas terrível para palcos abertos com PA (muito feedback).
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="clabel">Espectromorfologia — Conceitos</div>
     <div class="info">
       <b>Espectro</b> — distribuição de energia nas frequências em dado instante.<br><br>
-      <b>Morfologia</b> — como o espectro muda ao longo do tempo.<br><br>
+      <b>Morfologia</b> — como o espectro muda ao longo do tempo. Essencial no design de som.<br><br>
       <b>Onset</b> — momento de ataque: gradual (fade) ou abrupto (percussão).<br><br>
       <b>Fluxo espectral</b> — taxa de variação do espectro entre frames consecutivos.<br><br>
       <b>Centróide espectral</b> — "centro de gravidade" do espectro; correlaciona com brilho.<br><br>
       <b>Bandwidth</b> — largura da região espectral ativa; riqueza tímbrica.
     </div>
   </div>
+
   <div class="card">
-    <div class="clabel">Protocolo de feedback ao vivo</div>
+    <div class="clabel">Protocolo Rápido de Feedback</div>
     <div class="info">
-      1. <b style="color:var(--text)">Não mova o fader</b> — isole o canal com gain antes de qualquer ajuste.<br><br>
-      2. <b style="color:var(--text)">Aba MIC</b> — ative o microfone, o app detecta o pico automaticamente.<br><br>
-      3. <b style="color:var(--text)">Aba TOM</b> — use a zona 630–670 Hz para confirmar a frequência por comparação auditiva.<br><br>
-      4. <b style="color:var(--text)">Aplique corte de 3–6 dB</b> na frequência identificada, Q entre 0.5 e 1.0.<br><br>
-      5. <b style="color:var(--text)">Verifique o ganho</b> do canal e do monitor antes de reabrir.
+      1. <b style="color:var(--text)">Não mova o fader</b> — isole o canal com ganho (gain) antes de alterar a mix geral.<br><br>
+      2. <b style="color:var(--text)">Aba MIC</b> — ative o microfone, o app detectará o pico exato automaticamente.<br><br>
+      3. <b style="color:var(--text)">Aba TOM</b> — gere a frequência suspeita (ex: 630 Hz) para confirmar auditivamente.<br><br>
+      4. <b style="color:var(--text)">Aplique corte</b> no EQ paramétrico da mesa (3 a 6 dB, Q estreito 1.5 a 3.0).
     </div>
   </div>
 </div>
 
-</div><!-- /cnt -->
-</div><!-- /app -->
-
-<div id="fb"></div>
+</div></div><div id="fb"></div>
 
 <script>
 'use strict';
@@ -643,6 +535,22 @@ function getAC(){
   return AC;
 }
 document.getElementById('spec-cvs').addEventListener('click',()=>getAC());
+
+// ═══════════════════════ GLOBAL RESET ═══════════════════════
+async function globalAudioReset() {
+  panicSynth();
+  stopOsc();
+  stopQTone();
+  if (micActive) stopMic();
+
+  if (AC) {
+    try { await AC.close(); } catch(e) {}
+    AC = null; 
+  }
+  
+  getAC();
+  FB('Sistema de áudio reiniciado', '#00FF88');
+}
 
 // ═══════════════════════ HEADER SPECTRUM ═══════════════════════
 const spc = document.getElementById('spec-cvs');
@@ -681,7 +589,7 @@ function drawSpec(){
 drawSpec();
 
 // ═══════════════════════ TAB SWITCHING ═══════════════════════
-const PANES=['tom','mic','synt','freq','adsr','comp','ref'];
+const PANES=['tom','mic','synt','freq','adsr','ref'];
 function ST(id){
   PANES.forEach(p=>{
     document.getElementById('pane-'+p).classList.toggle('on',p===id);
@@ -689,12 +597,10 @@ function ST(id){
   document.querySelectorAll('.tb').forEach((b,i)=>{
     b.classList.toggle('on', PANES[i]===id);
   });
-  if(id==='adsr'){ setTimeout(()=>{ drawADSR(); drawAdsrQCvs(); drawSynADSR(); },60); }
-  if(id==='comp'){ setTimeout(drawComp,60); }
+  if(id==='adsr'){ setTimeout(()=>{ drawADSR(); },60); }
   if(id==='synt'){ setTimeout(()=>{ buildKeyboard(); drawSynADSR(); },60); }
 }
 
-// feedback banner
 let fbT=null;
 function FB(msg,col='#F5A623'){
   const el=document.getElementById('fb');
@@ -807,12 +713,10 @@ function f2note(f){
   return note+oct+(cents?` ${cents>0?'+':''}${cents}¢`:'');
 }
 
-// init
 document.getElementById('fsl').value=fLog(1000,20,20000);
 
 // ═══════════════════════ MIC + SPECTRUM ═══════════════════════
 let micStream=null, micSource=null, micAn=null, micActive=false;
-let micCompNode=null, micCompActive=false;
 let micGainNode=null;
 let wfallCtx=null, wfallData=[];
 const WFALL_H=60;
@@ -830,15 +734,8 @@ async function startMic(){
     micAn.fftSize=4096;
     micGainNode=c.createGain(); micGainNode.gain.value=1;
 
-    // compressor node (always present, bypassed by default)
-    micCompNode=c.createDynamicsCompressor();
-    updateMicComp();
-
-    if(micCompActive){
-      micSource.connect(micGainNode); micGainNode.connect(micCompNode); micCompNode.connect(micAn);
-    } else {
-      micSource.connect(micGainNode); micGainNode.connect(micAn);
-    }
+    micSource.connect(micGainNode); micGainNode.connect(micAn);
+    
     specAn=micAn;
     micActive=true;
     document.getElementById('mic-btn').textContent='🔴 PARAR MIC';
@@ -861,35 +758,6 @@ function stopMic(){
   document.getElementById('mic-db').textContent='— dBFS';
   document.getElementById('mic-vu').style.width='0%';
   document.getElementById('peak-alert').classList.remove('show');
-}
-
-function toggleMicComp(){
-  micCompActive=!micCompActive;
-  document.getElementById('mc-st').textContent=micCompActive?'ON':'OFF';
-  if(micActive){ stopMic(); startMic(); }
-}
-
-function updateMicComp(){
-  const thr=+document.getElementById('mc-thr').value;
-  const rat=+document.getElementById('mc-rat').value;
-  const atk=+document.getElementById('mc-atk').value;
-  const rel=+document.getElementById('mc-rel').value;
-  const kne=+document.getElementById('mc-kne').value;
-  const mku=+document.getElementById('mc-mku').value;
-  document.getElementById('mc-thr-v').textContent=thr+' dB';
-  document.getElementById('mc-rat-v').textContent=rat+':1';
-  document.getElementById('mc-atk-v').textContent=Math.round(atk*1000)+'ms';
-  document.getElementById('mc-rel-v').textContent=Math.round(rel*1000)+'ms';
-  document.getElementById('mc-kne-v').textContent=kne+' dB';
-  document.getElementById('mc-mku-v').textContent='+'+mku+' dB';
-  if(micCompNode){
-    micCompNode.threshold.value=thr;
-    micCompNode.ratio.value=rat;
-    micCompNode.attack.value=atk;
-    micCompNode.release.value=rel;
-    micCompNode.knee.value=kne;
-    if(micGainNode) micGainNode.gain.value=Math.pow(10,mku/20);
-  }
 }
 
 const micSpecEl=document.getElementById('mic-spec');
@@ -923,7 +791,7 @@ function drawMicSpec(){
   document.getElementById('mic-db').textContent=db.toFixed(1)+' dBFS';
   document.getElementById('mic-vu').style.width=Math.max(0,Math.min(100,(db+80)/80*100))+'%';
 
-  // peak freq detection
+  // Peak freq detection
   let peakIdx=0, peakVal=0;
   for(let i=2;i<data.length;i++){
     if(data[i]>peakVal&&data[i]>80){ peakVal=data[i]; peakIdx=i; }
@@ -944,19 +812,10 @@ function drawMicSpec(){
     document.getElementById('mic-freq').style.color='var(--green)';
   }
 
-  // comp meters
-  if(micCompNode&&micCompActive){
-    const gr=micCompNode.reduction||0;
-    document.getElementById('mc-gr').textContent=gr.toFixed(1)+' dB';
-    document.getElementById('mc-in').textContent=db.toFixed(1)+' dB';
-    document.getElementById('mc-out').textContent=(db+gr).toFixed(1)+' dB';
-  }
-
-  // draw spectrum
+  // Draw spectrum
   const W=micSpecEl.offsetWidth, H=micSpecEl.offsetHeight, sc=devicePixelRatio;
   micSpecCtx.clearRect(0,0,micSpecEl.width,micSpecEl.height);
 
-  // frequency grid lines
   [100,500,1000,5000,10000].forEach(f=>{
     const x=(Math.log10(f)-Math.log10(20))/(Math.log10(20000)-Math.log10(20))*W;
     micSpecCtx.strokeStyle='rgba(42,42,62,0.8)';
@@ -970,7 +829,6 @@ function drawMicSpec(){
     micSpecCtx.fillText(f>=1000?f/1000+'k':f,x*sc+2,H*sc-2);
   });
 
-  // spectrum bars (log scale)
   for(let px=0;px<W;px++){
     const logF=Math.pow(10,Math.log10(20)+(px/W)*(Math.log10(20000)-Math.log10(20)));
     const idx=Math.round(logF/sampleRate*micAn.fftSize);
@@ -981,7 +839,6 @@ function drawMicSpec(){
     micSpecCtx.fillRect(px*sc,(H-h)*sc,sc,h*sc);
   }
 
-  // peak marker
   if(peakVal>80){
     const px=(Math.log10(peakFreq)-Math.log10(20))/(Math.log10(20000)-Math.log10(20))*W;
     micSpecCtx.strokeStyle='var(--amber)';
@@ -992,7 +849,6 @@ function drawMicSpec(){
     micSpecCtx.stroke();
   }
 
-  // waterfall
   const wW=wfallEl.offsetWidth, wH=wfallEl.offsetHeight;
   const row=[];
   for(let px=0;px<wW;px++){
@@ -1049,7 +905,6 @@ function buildKeyboard(){
       kb.appendChild(w);
       wIdx++;
     });
-    // black keys overlay
     BLACK_POS.forEach((pos,i)=>{
       const semi=BLACK[i%BLACK.length];
       if(semi>=12)return;
@@ -1091,7 +946,6 @@ function noteOn(midi){
   env.gain.linearRampToValueAtTime(s*.45,c.currentTime+a+d);
   env.connect(synFilter);
 
-  // LFO per-voice pitch
   let lfoV=null;
   if(synLFODest==='pitch'){
     lfoV=c.createOscillator();
@@ -1156,7 +1010,6 @@ function initSynChain(c){
   if(!masterAn){ masterAn=c.createAnalyser(); masterAn.fftSize=512; masterAn.connect(c.destination); specAn=masterAn; }
   synFilter.connect(synMaster); synMaster.connect(masterAn);
 
-  // global LFO for filter/amp
   lfoNode=c.createOscillator();
   lfoGain=c.createGain();
   lfoNode.frequency.value=+document.getElementById('lfo-rate').value;
@@ -1235,7 +1088,6 @@ function loadSynthPreset(p){
   FB('Preset: '+p,'#A78BFA');
 }
 
-// synth ADSR canvas
 const synAdsrCvs=document.getElementById('syn-adsr-cvs');
 const synAdsrCtx=synAdsrCvs.getContext('2d');
 function drawSynADSR(){
@@ -1251,10 +1103,15 @@ function drawSynADSR(){
 
 // ═══════════════════════ FREQ QUIZ ═══════════════════════
 const BANDS=[
-  {l:'< 60 Hz',lo:20,hi:60},{l:'60–200 Hz',lo:60,hi:200},
-  {l:'200–500 Hz',lo:200,hi:500},{l:'500Hz–1kHz',lo:500,hi:1000},
-  {l:'1–2 kHz',lo:1000,hi:2000},{l:'2–5 kHz',lo:2000,hi:5000},
-  {l:'5–10 kHz',lo:5000,hi:10000},{l:'10–20 kHz',lo:10000,hi:20000},
+  {l:'Sub (20–60 Hz)',lo:20,hi:60},
+  {l:'Grave (60–120 Hz)',lo:60,hi:120},
+  {l:'Grave-Méd (120–250)',lo:120,hi:250},
+  {l:'Boxy/Mud (250–500)',lo:250,hi:500},
+  {l:'Nasal (500Hz–1k)',lo:500,hi:1000},
+  {l:'Mordida (1–2 kHz)',lo:1000,hi:2000},
+  {l:'Presença (2–5 kHz)',lo:2000,hi:5000},
+  {l:'Sibilância (5–10k)',lo:5000,hi:10000},
+  {l:'Brilho/Ar (10–20k)',lo:10000,hi:20000}
 ];
 let qMode='id', qRange='full';
 let qF=0, qCorr=0, scR=0, scT=0, qStreak=[];
@@ -1343,7 +1200,7 @@ function exportSession(){
 
 qNext();
 
-// ═══════════════════════ ADSR VISUALIZER + QUIZ ═══════════════════════
+// ═══════════════════════ ADSR LIVRE ═══════════════════════
 const ADSR_PRESETS={
   pluck:   {a:1,d:200,s:0,r:100,name:'Pizzicato'},
   pad:     {a:800,d:400,s:80,r:1200,name:'Pad suave'},
@@ -1352,7 +1209,6 @@ const ADSR_PRESETS={
   organ:   {a:10,d:0,s:100,r:10,name:'Órgão'},
   strings: {a:600,d:200,s:90,r:1500,name:'Cordas'},
 };
-const ADSR_KEYS=Object.keys(ADSR_PRESETS);
 
 function drawADSROnCanvas(ctx2, cvs, a, d, s, r){
   const W=cvs.offsetWidth, H=cvs.offsetHeight, sc=devicePixelRatio;
@@ -1423,189 +1279,11 @@ function playADSR(){
   o.start(now); o.stop(now+a+d+st+r+.05);
 }
 
-// ADSR QUIZ
-let adsrQKey='piano', adsrQScR=0, adsrQScT=0, adsrQStreak=[];
-const adsrQCvs=document.getElementById('adsr-q-cvs');
-const adsrQCtx=adsrQCvs.getContext('2d');
-
-function drawAdsrQCvs(){
-  adsrQCvs.width=adsrQCvs.offsetWidth*devicePixelRatio;
-  adsrQCvs.height=adsrQCvs.offsetHeight*devicePixelRatio;
-}
-
-function adsrNextQ(){
-  adsrQKey=ADSR_KEYS[Math.floor(Math.random()*ADSR_KEYS.length)];
-  const pr=ADSR_PRESETS[adsrQKey];
-  // draw hidden (blank canvas) — shape revealed after answer
-  drawAdsrQCvs();
-  document.getElementById('adsr-q-hint').textContent='Ouça o envelope e adivinhe o timbre:';
-
-  // build options
-  let opts=new Set([adsrQKey]);
-  while(opts.size<Math.min(4,ADSR_KEYS.length)) opts.add(ADSR_KEYS[Math.floor(Math.random()*ADSR_KEYS.length)]);
-  opts=Array.from(opts).sort(()=>Math.random()-.5);
-
-  const container=document.getElementById('adsr-opts');
-  container.innerHTML='';
-  opts.forEach(k=>{
-    const b=document.createElement('button');
-    b.className='opt'; b.textContent=ADSR_PRESETS[k].name;
-    b.onclick=()=>adsrAnswer(k===adsrQKey,b,k,container);
-    container.appendChild(b);
-  });
-}
-
-function adsrQPlay(){
-  const c=getAC();
-  const pr=ADSR_PRESETS[adsrQKey];
-  const a=pr.a/1000, d=pr.d/1000, s=pr.s/100, r=pr.r/1000, st=.5;
-  const o=c.createOscillator(), g=c.createGain();
-  o.type='sine'; o.frequency.value=440;
-  const now=c.currentTime;
-  g.gain.setValueAtTime(0,now);
-  g.gain.linearRampToValueAtTime(.5,now+a);
-  g.gain.linearRampToValueAtTime(s*.5,now+a+d);
-  g.gain.setValueAtTime(s*.5,now+a+d+st);
-  g.gain.linearRampToValueAtTime(0,now+a+d+st+r);
-  o.connect(g); g.connect(c.destination);
-  o.start(now); o.stop(now+a+d+st+r+.05);
-}
-
-function adsrAnswer(correct,btn,key,container){
-  adsrQScT++; adsrQStreak.push(correct);
-  if(adsrQStreak.length>8) adsrQStreak.shift();
-  if(correct){ adsrQScR++; btn.classList.add('ok'); FB('✓ Correto!','#00FF88'); }
-  else{
-    btn.classList.add('ng');
-    container.querySelectorAll('.opt').forEach(b=>{
-      if(b.textContent===ADSR_PRESETS[adsrQKey].name) b.classList.add('ok');
-    });
-    FB('✗ Era: '+ADSR_PRESETS[adsrQKey].name,'#FF3B30');
-  }
-  // reveal curve
-  const pr=ADSR_PRESETS[adsrQKey];
-  drawADSROnCanvas(adsrQCtx,adsrQCvs,pr.a,pr.d,pr.s/100,pr.r);
-  document.getElementById('adsr-q-hint').textContent='Envelope revelado: '+ADSR_PRESETS[adsrQKey].name;
-
-  document.getElementById('adsr-sc-r').textContent=adsrQScR;
-  document.getElementById('adsr-sc-t').textContent=adsrQScT;
-  document.getElementById('adsr-streak').innerHTML=adsrQStreak.map(h=>`<span class="pip ${h?'h':'m'}"></span>`).join('');
-  container.querySelectorAll('.opt').forEach(b=>b.style.pointerEvents='none');
-  setTimeout(adsrNextQ,2000);
-}
-
-adsrNextQ();
-
-// ═══════════════════════ COMPRESSOR ═══════════════════════
-const compCvs=document.getElementById('comp-cvs');
-const compCtx2=compCvs.getContext('2d');
-
-function drawComp(){
-  compCvs.width=compCvs.offsetWidth*devicePixelRatio;
-  compCvs.height=compCvs.offsetHeight*devicePixelRatio;
-  const thr=+document.getElementById('c-thr').value;
-  const rat=+document.getElementById('c-rat').value;
-  const atk=+document.getElementById('c-atk').value;
-  const rel=+document.getElementById('c-rel').value;
-  const kne=+document.getElementById('c-kne').value;
-  const mku=+document.getElementById('c-mku').value;
-  document.getElementById('cv-thr').textContent=thr+' dB';
-  document.getElementById('cv-rat').textContent=rat>=20?'∞:1':rat+':1';
-  document.getElementById('cv-atk').textContent=Math.round(atk*1000)+'ms';
-  document.getElementById('cv-rel').textContent=Math.round(rel*1000)+'ms';
-  document.getElementById('cv-kne').textContent=kne+' dB';
-  document.getElementById('cv-mku').textContent='+'+mku+' dB';
-
-  const W=compCvs.offsetWidth, H=compCvs.offsetHeight, sc=devicePixelRatio;
-  const pad=18*sc;
-  const cW=compCvs.width-2*pad, cH=compCvs.height-2*pad;
-  const dbMin=-60, dbMax=0;
-  const dbX=db=>pad+(db-dbMin)/(dbMax-dbMin)*cW;
-  const dbY=db=>cH+pad-(db-dbMin)/(dbMax-dbMin)*cH;
-  const ctx2=compCtx2;
-  ctx2.clearRect(0,0,compCvs.width,compCvs.height);
-
-  // grid
-  ctx2.strokeStyle='rgba(37,37,56,.9)'; ctx2.lineWidth=sc;
-  for(let db=-60;db<=0;db+=12){
-    ctx2.beginPath(); ctx2.moveTo(dbX(db),pad); ctx2.lineTo(dbX(db),cH+pad); ctx2.stroke();
-    ctx2.beginPath(); ctx2.moveTo(pad,dbY(db)); ctx2.lineTo(cW+pad,dbY(db)); ctx2.stroke();
-  }
-  // 1:1 ref
-  ctx2.beginPath(); ctx2.moveTo(dbX(-60),dbY(-60)); ctx2.lineTo(dbX(0),dbY(0));
-  ctx2.strokeStyle='rgba(90,90,120,.4)'; ctx2.lineWidth=sc; ctx2.setLineDash([3*sc,3*sc]); ctx2.stroke(); ctx2.setLineDash([]);
-  // threshold
-  ctx2.beginPath(); ctx2.moveTo(dbX(thr),pad); ctx2.lineTo(dbX(thr),cH+pad);
-  ctx2.strokeStyle='rgba(255,59,48,.5)'; ctx2.lineWidth=sc; ctx2.stroke();
-
-  // curve
-  ctx2.beginPath(); let first2=true;
-  for(let inDb=-60;inDb<=0;inDb+=.5){
-    let outDb;
-    const ovr=inDb-thr;
-    if(kne>0&&ovr>-kne/2&&ovr<kne/2){
-      const t2=(ovr+kne/2)/kne;
-      outDb=inDb+(1/rat-1)*t2*(inDb-thr)*.5;
-    } else if(inDb<=thr-kne/2){ outDb=inDb; }
-    else { outDb=thr+(inDb-thr)/rat; }
-    outDb=Math.min(outDb+mku,6);
-    const x=dbX(inDb), y=dbY(Math.max(-60,outDb));
-    if(first2){ctx2.moveTo(x,y);first2=false;}else ctx2.lineTo(x,y);
-  }
-  ctx2.strokeStyle='#00FF88'; ctx2.lineWidth=2*sc; ctx2.stroke();
-
-  // labels
-  ctx2.fillStyle='rgba(90,90,120,.8)'; ctx2.font=`${7*sc}px JetBrains Mono`; ctx2.textAlign='center';
-  [-60,-48,-36,-24,-12,0].forEach(db=>ctx2.fillText(db,dbX(db),cH+pad+11*sc));
-
-  // live sim
-  const inDb=thr-3+Math.random()*15;
-  const ovr2=inDb-thr;
-  let gr=0; if(ovr2>0) gr=ovr2-ovr2/rat;
-  document.getElementById('c-gr').textContent=(gr).toFixed(1)+' dB';
-  document.getElementById('c-in').textContent=inDb.toFixed(1)+' dBFS';
-  document.getElementById('c-out').textContent=(inDb-gr+mku).toFixed(1)+' dBFS';
-}
-
-function loadComp(p){
-  const prs={vocal:{thr:-18,rat:4,kne:6,mku:6,atk:.003,rel:.25},drum:{thr:-12,rat:8,kne:2,mku:4,atk:.001,rel:.1},limit:{thr:-6,rat:20,kne:0,mku:3,atk:.0001,rel:.05},gentle:{thr:-24,rat:2,kne:10,mku:8,atk:.01,rel:.5}};
-  const pr=prs[p];
-  document.getElementById('c-thr').value=pr.thr;
-  document.getElementById('c-rat').value=pr.rat;
-  document.getElementById('c-kne').value=pr.kne;
-  document.getElementById('c-mku').value=pr.mku;
-  document.getElementById('c-atk').value=pr.atk;
-  document.getElementById('c-rel').value=pr.rel;
-  drawComp();
-}
-
-let compTestOsc2=null;
-function testComp(){
-  const c=getAC();
-  if(compTestOsc2){try{compTestOsc2.stop();}catch(e){}}
-  const comp=c.createDynamicsCompressor();
-  comp.threshold.value=+document.getElementById('c-thr').value;
-  comp.ratio.value=+document.getElementById('c-rat').value;
-  comp.knee.value=+document.getElementById('c-kne').value;
-  comp.attack.value=+document.getElementById('c-atk').value;
-  comp.release.value=+document.getElementById('c-rel').value;
-  const mk=c.createGain();
-  mk.gain.value=Math.pow(10,+document.getElementById('c-mku').value/20);
-  compTestOsc2=c.createOscillator();
-  const mod=c.createOscillator(), mg=c.createGain();
-  mod.frequency.value=1.5; mg.gain.value=200;
-  mod.connect(mg); mg.connect(compTestOsc2.frequency);
-  compTestOsc2.type='sawtooth'; compTestOsc2.frequency.value=220;
-  compTestOsc2.connect(comp); comp.connect(mk); mk.connect(c.destination);
-  mod.start(); compTestOsc2.start();
-  compTestOsc2.stop(c.currentTime+3.5); mod.stop(c.currentTime+3.5);
-}
-
 // ═══════════════════════ INIT ═══════════════════════
-setTimeout(()=>{ drawComp(); drawADSR(); drawSynADSR(); buildKeyboard(); },200);
+setTimeout(()=>{ drawADSR(); drawSynADSR(); buildKeyboard(); },200);
 window.addEventListener('resize',()=>{
   rsSpec(); resMicCvs();
-  setTimeout(()=>{ drawComp(); drawADSR(); drawSynADSR(); },80);
+  setTimeout(()=>{ drawADSR(); drawSynADSR(); },80);
 });
 
 // prevent scroll on key touch
@@ -1614,4 +1292,3 @@ document.getElementById('keyboard').addEventListener('touchmove',e=>e.preventDef
 </body>
 </html>
 HTMLEOF
-echo "Done: $(wc -l < /mnt/user-data/outputs/audio-trainer.html) linhas"
