@@ -48,10 +48,13 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--sans);height:
 .clabel2{font-family:var(--mono);font-size:8px;letter-spacing:.12em;color:var(--muted2);text-transform:uppercase;margin-bottom:6px}
 .bignum{font-family:var(--mono);font-size:40px;font-weight:700;color:var(--amber);line-height:1;letter-spacing:-1px}
 .bigunit{font-family:var(--mono);font-size:13px;color:var(--muted);margin-left:3px}
+.info{font-size:12px;line-height:1.75;color:var(--muted2)}
+.info b{color:var(--amber)}
 
 /* INPUTS */
 .ri{-webkit-appearance:none;width:100%;height:3px;background:var(--border);border-radius:2px;outline:none;cursor:pointer;margin:10px 0 3px}
 .ri::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--amber);box-shadow:0 0 8px rgba(245,166,35,.4);cursor:pointer}
+.ri:disabled::-webkit-slider-thumb{background:var(--muted);box-shadow:none;cursor:not-allowed}
 .rlabs{display:flex;justify-content:space-between;font-family:var(--mono);font-size:8px;color:var(--muted)}
 .btn{display:flex;align-items:center;justify-content:center;gap:5px;width:100%;padding:13px;border-radius:8px;border:none;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:opacity .15s,transform .1s;text-transform:uppercase}
 .btn:active{transform:scale(.97)}
@@ -66,6 +69,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--sans);height:
 .chip-xs{font-size:8px;padding:6px 5px}
 @media (hover: hover) { .chip:hover { border-color:var(--amber); color:var(--amber); background:var(--amber-glow) } .opt:hover { border-color:var(--blue); color:var(--blue) } }
 .chip.on { border-color:var(--amber); color:var(--amber); background:var(--amber-glow) }
+.chip.on-r { border-color:var(--red); color:var(--red); background:rgba(255,59,48,0.1) }
 
 /* INDICATORS & CANVAS */
 .dot{width:7px;height:7px;border-radius:50%;background:var(--border);transition:background .2s;flex-shrink:0}
@@ -93,6 +97,7 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--sans);height:
 #peak-alert{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;padding:7px 12px;background:rgba(255,59,48,.15);border:1px solid var(--red);border-radius:6px;color:var(--red);text-align:center;display:none;margin-bottom:8px}
 #peak-alert.show{display:block}
 .warn-box{background:rgba(245,166,35,0.1);border:1px solid var(--amber);border-radius:6px;padding:8px;font-family:var(--mono);font-size:9px;color:var(--amber);margin-bottom:10px;line-height:1.4}
+.warn-box.doom{background:rgba(255,59,48,0.1);border-color:var(--red);color:var(--red)}
 
 /* GROOVE / SEQ */
 .seq-grid{display:grid;grid-template-columns:repeat(16,1fr);gap:2px;margin-bottom:8px}
@@ -100,6 +105,13 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--sans);height:
 .seq-cell.on{background:var(--amber);border-color:var(--amber)}
 .seq-cell.active{box-shadow:inset 0 0 0 1px #fff; background:var(--text)}
 .seq-row-lbl{font-family:var(--mono);font-size:8px;color:var(--muted2);width:25px;text-align:right;padding-right:6px}
+
+/* QUIZ OPTS */
+.opt{padding:13px 4px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:10px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
+.opt.ok{border-color:var(--green);color:var(--green);background:rgba(0,255,136,.07)}
+.opt.ng{border-color:var(--red);color:var(--red);background:rgba(255,59,48,.07)}
+.pip{display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--border);margin:0 1px;transition:background .2s}
+.pip.h{background:var(--green)} .pip.m{background:var(--red)}
 </style>
 </head>
 <body>
@@ -131,6 +143,12 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--sans);height:
     <div class="clabel">Gerador de Sinal</div>
     <div style="display:flex;align-items:baseline;gap:2px;margin-bottom:2px"><span class="bignum" id="fd">1000</span><span class="bigunit">Hz</span></div>
     <div id="note-lbl" style="font-family:var(--mono);font-size:10px;color:var(--muted)">A5 ≈ 880 Hz</div>
+    <div class="gflex" style="margin-top:10px">
+      <button class="chip chip-xs" onclick="SZ(20,200)">SUB/LOW</button>
+      <button class="chip chip-xs on" onclick="SZ(20,20000)" id="z-full">FULL</button>
+      <button class="chip chip-xs" onclick="SZ(600,800)" style="border-color:var(--red);color:var(--red)">630–670</button>
+      <button class="chip chip-xs" onclick="SZ(800,5000)">MID</button>
+    </div>
     <input type="range" class="ri" id="fsl" min="0" max="100" step="0.01" value="50" oninput="UF(this.value)">
     <div class="rlabs"><span id="zlo">20 Hz</span><span id="zhi">20 kHz</span></div>
     <div class="vu-wrap"><div class="vu-bar" id="vol-bar" style="width:60%"></div></div>
@@ -170,24 +188,36 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--sans);height:
   </div>
 
   <div class="card">
-    <div class="row" style="justify-content:space-between">
-      <div class="clabel" style="margin:0">Isolar Banda (Bandpass)</div>
+    <div class="row" style="justify-content:space-between; margin-bottom:10px">
+      <div class="clabel" style="margin:0; color:var(--red)">Monitoramento & Feedback Criativo</div>
+      <button class="chip chip-xs" id="mon-btn" onclick="toggleMicMonitor()">OFF</button>
+    </div>
+    <div class="warn-box doom">⚠ ATENÇÃO: Ao ativar sem fones, o celular irá retroalimentar. Utilize as ferramentas abaixo para domar o caos.</div>
+    
+    <div class="row" style="justify-content:space-between; margin-top:14px">
+      <div class="clabel2" style="margin:0">Isolar Banda (Bandpass)</div>
       <button class="chip chip-xs" id="bp-toggle" onclick="toggleMicFilter()">OFF</button>
     </div>
-    <div style="margin-top:10px">
-      <div class="clabel2">Frequência Central</div>
+    <div style="margin-top:6px">
       <input type="range" class="ri" id="mic-bp-f" min="0" max="100" step="0.1" value="50" oninput="updateMicFilter()" disabled>
       <div class="rlabs"><span>20Hz</span><span id="bp-f-val">1kHz</span></div>
-      <div class="clabel2" style="margin-top:8px">Largura / Q</div>
+    </div>
+    <div style="margin-top:6px">
       <input type="range" class="ri" id="mic-bp-q" min="0.5" max="20" step="0.5" value="5" oninput="updateMicFilter()" disabled>
       <div class="rlabs"><span>Largo</span><span id="bp-q-val">Q: 5</span></div>
     </div>
-  </div>
 
-  <div class="card">
-    <div class="clabel">Monitoramento (Fone)</div>
-    <div class="warn-box">⚠ Risco severo de microfonia. Habilite apenas se estiver utilizando fones de ouvido fechados para caçar frequências.</div>
-    <button class="btn btn-x" id="mon-btn" onclick="toggleMicMonitor()">FONES OFF</button>
+    <hr style="border:none; border-top:1px dashed var(--border); margin:14px 0">
+    <div class="row" style="justify-content:space-between; margin-bottom:10px">
+      <div class="clabel2" style="margin:0">DOOM MODE (Drive + Brickwall)</div>
+      <button class="chip chip-xs" id="doom-toggle" onclick="toggleDoomMode()">OFF</button>
+    </div>
+    <div class="info" style="font-size:10px; margin-bottom:10px">Satura a onda e aplica um limiter de ataque rápido (-3dB) no monitor, transformando microfonia em síntese.</div>
+    <div>
+      <div class="clabel2">Saturação Harmônica</div>
+      <input type="range" class="ri" id="mic-drive" min="0" max="100" step="1" value="20" oninput="updateDoomMode()" disabled>
+      <div class="rlabs"><span>Limpo</span><span id="drive-val">20%</span></div>
+    </div>
   </div>
 </div>
 
@@ -271,8 +301,77 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--sans);height:
   </div>
 </div>
 
-<div id="pane-freq" class="pane"><div class="card"><div class="info">Sessão em revisão para expansão...</div></div></div>
-<div id="pane-ref" class="pane"><div class="card"><div class="info"><b>Sessão de Referência e Setup de PA</b><br>As orientações estruturais seguem ativas em background.</div></div></div>
+<div id="pane-freq" class="pane">
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:6px">
+      <div><div class="clabel" style="margin:0">Pontuação</div>
+        <div style="font-family:var(--mono);font-size:26px;font-weight:700;color:var(--green)"><span id="sc-r">0</span>/<span id="sc-t">0</span></div>
+      </div>
+      <div style="text-align:right"><div class="clabel" style="margin:0">Acertos</div>
+        <div style="font-family:var(--mono);font-size:26px;font-weight:700;color:var(--amber)" id="sc-p">—</div>
+      </div>
+    </div>
+    <div id="streak-row" style="min-height:14px"></div>
+  </div>
+  <div class="card">
+    <div class="clabel2">Modo da Faixa</div>
+    <div class="g2">
+      <button class="chip on" id="qr-full" onclick="setQRange('full')">20 Hz–20 kHz</button>
+      <button class="chip"    id="qr-mid"  onclick="setQRange('mid')">200 Hz–8 kHz</button>
+      <button class="chip"    id="qr-fb"   onclick="setQRange('fb')">Feedback (500–1k)</button>
+      <button class="chip"    id="qr-hi"   onclick="setQRange('hi')">2 kHz–20 kHz</button>
+    </div>
+  </div>
+  <div class="card" id="quiz-card">
+    <div class="clabel" id="q-instr">Ouça o tom e identifique a banda:</div>
+    <button class="btn btn-a" id="q-play" style="margin-bottom:10px">▶ OUVIR TOM</button>
+    <div class="g2" id="q-opts"></div>
+    <button class="btn btn-x" style="margin-top:8px;font-size:9px" onclick="qNext()">PRÓXIMA →</button>
+  </div>
+</div>
+
+<div id="pane-ref" class="pane">
+  <div class="card">
+    <div class="clabel">Mapa de Frequências (PA / Palco)</div>
+    <div class="info">
+      <b>20–60 Hz</b> — Sub-grave. Sensação física, rumble, peso do bumbo.<br><br>
+      <b>60–120 Hz</b> — Grave. Corpo do baixo e bumbo. Ponto de HPF.<br><br>
+      <b>120–250 Hz</b> — Médio-grave. Calor. Excesso causa som "lamacento" (mud).<br><br>
+      <b>250–500 Hz</b> — Médio-baixo. Som "encaxotado" (boxy).<br><br>
+      <b>500 Hz–1 kHz</b> — Médio central. Inteligibilidade vocal, tom anasalado.<br><br>
+      <b style="color:var(--red)">630–670 Hz</b> — <b style="color:var(--red)">Zona crítica de feedback em dinâmicos de palco.</b><br><br>
+      <b>1–2 kHz</b> — Ataque, mordida de guitarras e caixas.<br><br>
+      <b>2–5 kHz</b> — Presença. Área de maior sensibilidade auditiva (fadiga).<br><br>
+      <b>5–10 kHz</b> — Sibilância (fricativas da voz), brilho de pratos.<br><br>
+      <b>10–20 kHz</b> — Ar. Detalhe super-agudo, shimmer.
+    </div>
+  </div>
+  <div class="card">
+    <div class="clabel">Estrutura de Ganhos (Gain Staging)</div>
+    <div class="info">
+      <b>Alvo Nominal (-18 dBFS):</b> Padrão ótimo de gravação, garantindo *headroom* ideal para plugins que simulam equipamento analógico (-18 dBFS ≈ 0 VU ≈ +4 dBu).<br><br>
+      <b>Headroom:</b> Margem de segurança entre o nível nominal e o clipe. Evita distorções em transientes.<br><br>
+      <b>Piso de Ruído:</b> Manter o ganho robusto (sem clipar) maximiza a relação sinal-ruído (SNR).
+    </div>
+  </div>
+  <div class="card">
+    <div class="clabel">Padrões Polares (Microfones)</div>
+    <div class="info">
+      <b>Cardioide:</b> Captação frontal. Máxima rejeição a 180° (traseira). Coloque o monitor diretamente atrás do pedestal.<br><br>
+      <b>Supercardioide:</b> Foco frontal estreito com lóbulo traseiro. A rejeição máxima ocorre aos 126°. Posicione os monitores nas diagonais traseiras.<br><br>
+      <b>Omnidirecional:</b> Captação 360°. Alta fidelidade, mas terrível para palcos abertos com PA (muito feedback).
+    </div>
+  </div>
+  <div class="card">
+    <div class="clabel">Espectromorfologia — Conceitos</div>
+    <div class="info">
+      <b>Espectro</b> — distribuição de energia nas frequências em dado instante.<br><br>
+      <b>Morfologia</b> — como o espectro muda ao longo do tempo. Essencial no design de som.<br><br>
+      <b>Onset</b> — ataque: gradual (fade) ou abrupto (percussão).<br><br>
+      <b>Centróide espectral</b> — "centro de gravidade" do espectro; correlaciona com brilho.
+    </div>
+  </div>
+</div>
 
 </div>
 </div>
@@ -282,7 +381,6 @@ html,body{background:var(--bg);color:var(--text);font-family:var(--sans);height:
 'use strict';
 // ═══════════════════════ CORE AUDIO SYSTEM ═══════════════════════
 let AC = null, masterAn = null, specAn = null;
-
 function getAC() {
   if (!AC || AC.state === 'closed') { 
     AC = new (window.AudioContext || window.webkitAudioContext)(); 
@@ -305,17 +403,16 @@ document.body.addEventListener('touchstart', () => { if(AC && AC.state === 'susp
 document.body.addEventListener('mousedown', () => { if(AC && AC.state === 'suspended') AC.resume(); }, {passive: true});
 
 async function globalAudioReset() {
-  panicSynth(); stopOsc(); if (micActive) stopMic(); toggleSeq(false); toggleArp(false);
+  panicSynth(); stopOsc(); stopQTone(); if (micActive) stopMic(); toggleSeq(false); toggleArp(false);
   if (AC) { try { await AC.close(); } catch(e) {} AC = null; }
   masterAn = null; specAn = null; synFilter = null; synMaster = null; 
-  getAC(); FB('Áudio reiniciado e cabos reconectados', '#00FF88');
+  getAC(); FB('Áudio reiniciado', '#00FF88');
 }
 
 // ═══════════════════════ HEADER SPECTRUM ═══════════════════════
 const spc=document.getElementById('spec-cvs'); const spcCtx=spc.getContext('2d'); let idleP=0;
 function rsSpec() { if(spc.offsetWidth>0) { spc.width=spc.offsetWidth*devicePixelRatio; spc.height=spc.offsetHeight*devicePixelRatio; } }
 window.addEventListener('resize', rsSpec); rsSpec();
-
 function drawSpec() {
   requestAnimationFrame(drawSpec); if(!spc.width) return;
   const W=spc.offsetWidth, H=spc.offsetHeight, sc=devicePixelRatio;
@@ -335,8 +432,7 @@ function drawSpec() {
   } catch (e) { drawIdle(bars,bw,H,sc); }
 }
 function drawIdle(bars,bw,H,sc) {
-  idleP+=0.035;
-  for(let i=0;i<bars;i++){ const h=(Math.sin(i*.35+idleP)*.25+.3)*H*.45; spcCtx.fillStyle='rgba(245,166,35,0.18)'; spcCtx.fillRect((i*bw+1)*sc,(H-h)*sc,(bw-2)*sc,h*sc); }
+  idleP+=0.035; for(let i=0;i<bars;i++){ const h=(Math.sin(i*.35+idleP)*.25+.3)*H*.45; spcCtx.fillStyle='rgba(245,166,35,0.18)'; spcCtx.fillRect((i*bw+1)*sc,(H-h)*sc,(bw-2)*sc,h*sc); }
 }
 drawSpec();
 
@@ -347,17 +443,29 @@ let fbT=null; function FB(msg, col='#F5A623'){ const el=document.getElementById(
 // ═══════════════════════ GENERATOR (TOM) ═══════════════════════
 let playing=false, curF=1000, curV=.6, curW='sine', osc=null, oscGain=null;
 function logF(v,lo,hi){ return Math.pow(10,(v/100)*(Math.log10(hi)-Math.log10(lo))+Math.log10(lo)); }
+function fLog(f,lo,hi){ return (Math.log10(f)-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo))*100; }
+function SZ(lo,hi){ document.getElementById('zlo').textContent=lo>=1000?lo/1000+'kHz':lo+'Hz'; document.getElementById('zhi').textContent=hi>=1000?hi/1000+'kHz':hi+'Hz'; document.querySelectorAll('[id^=z-]').forEach(b=>b.classList.remove('on')); document.getElementById('fsl').value=Math.max(0,Math.min(100,fLog(Math.max(lo,Math.min(hi,curF)),lo,hi))); }
 function UF(v){ curF=Math.max(20,Math.min(20000,Math.round(logF(v,20,20000)))); document.getElementById('fd').textContent=curF>=1000?(curF/1000).toFixed(1)+'k':curF; if(osc) osc.frequency.setTargetAtTime(curF,AC.currentTime,.01); }
 function UV(v){ curV=v/100; document.getElementById('vol-bar').style.width=v+'%'; if(oscGain&&AC) oscGain.gain.setTargetAtTime(curV*.5, AC.currentTime, .02); }
 function SW(t){ curW=t; document.querySelectorAll('[id^=w-]').forEach(b=>b.classList.remove('on')); document.getElementById('w-'+t).classList.add('on'); if(osc) osc.type=t; }
 function TP(){ if(playing) stopOsc(); else startOsc(); }
 function startOsc(){ const c=getAC(); const mAn=getMasterAn(c); osc=c.createOscillator(); oscGain=c.createGain(); osc.type=curW; osc.frequency.value=curF; oscGain.gain.value=curV*.5; osc.connect(oscGain); oscGain.connect(mAn); osc.start(); playing=true; document.getElementById('pbtn').textContent='■ PARAR'; document.getElementById('pbtn').className='btn btn-r'; }
 function stopOsc(){ if(osc){try{osc.stop();}catch(e){} osc=null;} playing=false; document.getElementById('pbtn').textContent='▶ TOCAR'; document.getElementById('pbtn').className='btn btn-a'; }
+function doSweep(){ if(playing) stopOsc(); else { startOsc(); let t=0; const int = setInterval(()=>{ t+=0.01; if(t>1){clearInterval(int);stopOsc();} else UF(fLog(curF,20,20000)+(t>0.5?-1:1)); }, 20); } }
+document.getElementById('fsl').value=fLog(1000,20,20000);
 
-// ═══════════════════════ MIC + EQ SOLO + MONITOR ═══════════════════════
+// ═══════════════════════ MIC + EQ SOLO + DOOM LIMITER ═══════════════════════
 let micStream=null, micSource=null, micAn=null, micActive=false;
 let micFilter=null, micGainNode=null, micMonitorGain=null;
-let isMicFilterOn=false, isMicMonitorOn=false;
+let micDistortion=null, micLimiter=null, micHardClipper=null;
+let isMicFilterOn=false, isMicMonitorOn=false, isDoomModeOn=false;
+
+// Distorção matemática p/ saturação harmônica
+function makeDistortionCurve(amount) {
+  let k = amount, n_samples = 44100, curve = new Float32Array(n_samples), deg = Math.PI / 180, i = 0, x;
+  for ( ; i < n_samples; ++i ) { x = i * 2 / n_samples - 1; curve[i] = ( 3 + k ) * x * 20 * deg / ( Math.PI + k * Math.abs(x) ); }
+  return curve;
+}
 
 async function startMic(){
   try{
@@ -365,336 +473,194 @@ async function startMic(){
     micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
     micSource=c.createMediaStreamSource(micStream);
     
-    // Roteamento Crítico: Source -> Biquad(Solo) -> Gain -> Analyser -> Monitor
+    // 1. Isolador (Bandpass)
     micFilter = c.createBiquadFilter();
     micFilter.type = isMicFilterOn ? 'bandpass' : 'allpass';
     micFilter.frequency.value = logF(+document.getElementById('mic-bp-f').value, 20, 20000);
     micFilter.Q.value = +document.getElementById('mic-bp-q').value;
 
+    // 2. Analyser Path
     micGainNode = c.createGain(); micGainNode.gain.value = 1;
-    micMonitorGain = c.createGain(); micMonitorGain.gain.value = isMicMonitorOn ? 1 : 0;
     micAn = c.createAnalyser(); micAn.fftSize = 4096;
 
+    // 3. Monitor Path & Doom Dynamics
+    micDistortion = c.createWaveShaper();
+    micDistortion.curve = isDoomModeOn ? makeDistortionCurve(+document.getElementById('mic-drive').value) : makeDistortionCurve(0);
+    
+    micLimiter = c.createDynamicsCompressor();
+    micLimiter.threshold.value = isDoomModeOn ? -3 : 0;
+    micLimiter.knee.value = 0;
+    micLimiter.ratio.value = 20; // Brickwall
+    micLimiter.attack.value = 0.001; // Super rápido
+    micLimiter.release.value = 0.1;
+
+    // Hard Clipper de Segurança Final (Corta qualquer sinal > 1.0 ou < -1.0)
+    micHardClipper = c.createWaveShaper();
+    micHardClipper.curve = new Float32Array([-1, 1]); 
+
+    micMonitorGain = c.createGain(); 
+    micMonitorGain.gain.value = isMicMonitorOn ? 1 : 0;
+
+    // Roteamento
     micSource.connect(micFilter);
     micFilter.connect(micGainNode);
-    micGainNode.connect(micAn); // Puxa sinal para o gráfico
-    micGainNode.connect(micMonitorGain); 
-    micMonitorGain.connect(c.destination); // Risco de Microfonia aqui
+    micGainNode.connect(micAn); // Para o Gráfico visual
+    
+    micAn.connect(micDistortion);
+    micDistortion.connect(micLimiter);
+    micLimiter.connect(micMonitorGain);
+    micMonitorGain.connect(micHardClipper);
+    micHardClipper.connect(c.destination); // Saída Segura
     
     specAn = micAn; 
     micActive = true;
-    document.getElementById('mic-btn').textContent='🔴 PARAR MIC';
-    document.getElementById('mic-btn').className='btn btn-r';
+    document.getElementById('mic-btn').textContent='🔴 PARAR MIC'; document.getElementById('mic-btn').className='btn btn-r';
     drawMicSpec();
   } catch(e){ FB('Microfone não autorizado','#FF3B30'); }
 }
 
 function stopMic(){
   if(micStream) micStream.getTracks().forEach(t=>t.stop());
-  micStream=null; micSource=null; micAn=null; micActive=false; 
-  specAn = masterAn || null;
+  micStream=null; micSource=null; micAn=null; micActive=false; specAn = masterAn || null;
   document.getElementById('mic-btn').textContent='🎙 ATIVAR MIC'; document.getElementById('mic-btn').className='btn btn-g';
 }
 function toggleMic(){ if(micActive) stopMic(); else startMic(); }
 
 function toggleMicFilter() {
   isMicFilterOn = !isMicFilterOn;
-  const btn = document.getElementById('bp-toggle');
-  btn.textContent = isMicFilterOn ? 'ON' : 'OFF';
-  btn.className = isMicFilterOn ? 'chip chip-xs on' : 'chip chip-xs';
-  document.getElementById('mic-bp-f').disabled = !isMicFilterOn;
-  document.getElementById('mic-bp-q').disabled = !isMicFilterOn;
+  const btn = document.getElementById('bp-toggle'); btn.textContent = isMicFilterOn ? 'ON' : 'OFF'; btn.className = isMicFilterOn ? 'chip chip-xs on' : 'chip chip-xs';
+  document.getElementById('mic-bp-f').disabled = !isMicFilterOn; document.getElementById('mic-bp-q').disabled = !isMicFilterOn;
   if(micFilter) micFilter.type = isMicFilterOn ? 'bandpass' : 'allpass';
 }
 function updateMicFilter() {
-  const f = logF(+document.getElementById('mic-bp-f').value, 20, 20000);
-  const q = +document.getElementById('mic-bp-q').value;
-  document.getElementById('bp-f-val').textContent = f>=1000 ? (f/1000).toFixed(1)+'kHz' : Math.round(f)+'Hz';
-  document.getElementById('bp-q-val').textContent = 'Q: ' + q;
-  if(micFilter) {
-    micFilter.frequency.setTargetAtTime(f, AC.currentTime, 0.05);
-    micFilter.Q.setTargetAtTime(q, AC.currentTime, 0.05);
-  }
+  const f = logF(+document.getElementById('mic-bp-f').value, 20, 20000), q = +document.getElementById('mic-bp-q').value;
+  document.getElementById('bp-f-val').textContent = f>=1000 ? (f/1000).toFixed(1)+'kHz' : Math.round(f)+'Hz'; document.getElementById('bp-q-val').textContent = 'Q: ' + q;
+  if(micFilter) { micFilter.frequency.setTargetAtTime(f, AC.currentTime, 0.05); micFilter.Q.setTargetAtTime(q, AC.currentTime, 0.05); }
 }
+
 function toggleMicMonitor() {
   isMicMonitorOn = !isMicMonitorOn;
   const btn = document.getElementById('mon-btn');
-  btn.textContent = isMicMonitorOn ? 'FONES ON (ALERTA)' : 'FONES OFF';
-  btn.className = isMicMonitorOn ? 'btn btn-r' : 'btn btn-x';
+  btn.textContent = isMicMonitorOn ? 'FONES ON' : 'OFF';
+  btn.className = isMicMonitorOn ? 'chip chip-xs on-r' : 'chip chip-xs';
   if(micMonitorGain) micMonitorGain.gain.setTargetAtTime(isMicMonitorOn ? 1 : 0, AC.currentTime, 0.05);
+  if(isMicMonitorOn) FB('Monitoramento ativado. Cuidado com microfonia.', '#FF3B30');
+}
+
+function toggleDoomMode() {
+  isDoomModeOn = !isDoomModeOn;
+  const btn = document.getElementById('doom-toggle');
+  btn.textContent = isDoomModeOn ? 'ON' : 'OFF';
+  btn.className = isDoomModeOn ? 'chip chip-xs on-r' : 'chip chip-xs';
+  document.getElementById('mic-drive').disabled = !isDoomModeOn;
+  
+  if(micLimiter) micLimiter.threshold.setTargetAtTime(isDoomModeOn ? -3 : 0, AC.currentTime, 0.05);
+  updateDoomMode();
+  if(isDoomModeOn) FB('DOOM Mode Ativado 🤘', '#FF3B30');
+}
+
+function updateDoomMode() {
+  const drive = +document.getElementById('mic-drive').value;
+  document.getElementById('drive-val').textContent = drive + '%';
+  if(micDistortion) micDistortion.curve = isDoomModeOn ? makeDistortionCurve(drive) : makeDistortionCurve(0);
 }
 
 const micSpecEl=document.getElementById('mic-spec'), micSpecCtx=micSpecEl.getContext('2d');
 function drawMicSpec(){
   if(!micActive) return; requestAnimationFrame(drawMicSpec); if(!micAn || !AC) return;
   const data=new Uint8Array(micAn.frequencyBinCount); micAn.getByteFrequencyData(data);
-  const rms=data.reduce((s,v)=>s+(v/255)**2,0)/data.length;
-  const db=Math.max(-80,20*Math.log10(Math.sqrt(rms)+1e-9));
-  document.getElementById('mic-db').textContent=db.toFixed(1)+' dBFS';
-  document.getElementById('mic-vu').style.width=Math.max(0,Math.min(100,(db+80)/80*100))+'%';
-
-  let peakIdx=0, peakVal=0;
-  for(let i=2;i<data.length;i++){ if(data[i]>peakVal&&data[i]>80){ peakVal=data[i]; peakIdx=i; } }
+  const rms=data.reduce((s,v)=>s+(v/255)**2,0)/data.length; const db=Math.max(-80,20*Math.log10(Math.sqrt(rms)+1e-9));
+  document.getElementById('mic-db').textContent=db.toFixed(1)+' dBFS'; document.getElementById('mic-vu').style.width=Math.max(0,Math.min(100,(db+80)/80*100))+'%';
+  let peakIdx=0, peakVal=0; for(let i=2;i<data.length;i++){ if(data[i]>peakVal&&data[i]>80){ peakVal=data[i]; peakIdx=i; } }
   const peakFreq = Math.round(peakIdx*(AC.sampleRate||44100)/micAn.fftSize);
-  
   if(peakVal>80){
     document.getElementById('mic-freq').textContent=peakFreq>=1000?(peakFreq/1000).toFixed(2)+'k':peakFreq;
     document.getElementById('peak-alert').classList.toggle('show', peakVal>200&&rms>.05);
   }
-
-  const W=micSpecEl.offsetWidth, H=micSpecEl.offsetHeight, sc=devicePixelRatio;
-  if(W===0) return;
-  micSpecEl.width=W*sc; micSpecEl.height=H*sc; // resize fix
-  micSpecCtx.clearRect(0,0,micSpecEl.width,micSpecEl.height);
-
+  const W=micSpecEl.offsetWidth, H=micSpecEl.offsetHeight, sc=devicePixelRatio; if(W===0) return;
+  micSpecEl.width=W*sc; micSpecEl.height=H*sc; micSpecCtx.clearRect(0,0,micSpecEl.width,micSpecEl.height);
   for(let px=0;px<W;px++){
-    const logF=Math.pow(10,Math.log10(20)+(px/W)*(Math.log10(20000)-Math.log10(20)));
-    const val=data[Math.round(logF/(AC.sampleRate||44100)*micAn.fftSize)]||0;
-    micSpecCtx.fillStyle=`rgba(0,255,136,${0.3+val/255*.7})`;
-    micSpecCtx.fillRect(px*sc,(H-(val/255)*H)*sc,sc,(val/255)*H*sc);
+    const val=data[Math.round((Math.pow(10,Math.log10(20)+(px/W)*(Math.log10(20000)-Math.log10(20))))/(AC.sampleRate||44100)*micAn.fftSize)]||0;
+    micSpecCtx.fillStyle=`rgba(0,255,136,${0.3+val/255*.7})`; micSpecCtx.fillRect(px*sc,(H-(val/255)*H)*sc,sc,(val/255)*H*sc);
   }
 }
 
-// ═══════════════════════ SYNTHESIZER (Touch & Glissando) ═══════════════════════
+// ═══════════════════════ SYNTHESIZER ═══════════════════════
 let synOct=4, synWave1='sine', synFType='lowpass', synFilter=null, synMaster=null, synVoices={};
-const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-const WHITE=[0,2,4,5,7,9,11,12,14,16,17,19,21,23], BLACK=[1,3,6,8,10,13,15,18,20,22];
+const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'], WHITE=[0,2,4,5,7,9,11,12,14,16,17,19,21,23], BLACK=[1,3,6,8,10,13,15,18,20,22];
 const BLACK_POS=[0.55,1.55,3.55,4.55,5.55,7.55,8.55,10.55,11.55,12.55];
 
 function buildKeyboard(){
-  const kb=document.getElementById('keyboard'); kb.innerHTML=''; const octaves=2; let wIdx=0;
-  for(let oct=0;oct<octaves;oct++){
-    WHITE.filter(s=>s<12).forEach(semi=>{
-      const midi=(synOct+oct)*12+semi, w=document.createElement('div');
-      w.className='key-w key-el'; w.dataset.midi=midi; w.innerHTML=`<span class="key-note">${NOTES[semi]}</span>`;
-      kb.appendChild(w); wIdx++;
-    });
-    BLACK_POS.forEach((pos,i)=>{
-      const semi=BLACK[i%BLACK.length]; if(semi>=12)return;
-      const midi=(synOct+oct)*12+semi, b=document.createElement('div');
-      b.className='key-b key-el'; b.dataset.midi=midi; b.style.left=((wIdx-7+pos)*44+2)+'px';
-      kb.appendChild(b);
-    });
+  const kb=document.getElementById('keyboard'); kb.innerHTML=''; let wIdx=0;
+  for(let oct=0;oct<2;oct++){
+    WHITE.filter(s=>s<12).forEach(semi=>{ const midi=(synOct+oct)*12+semi, w=document.createElement('div'); w.className='key-w key-el'; w.dataset.midi=midi; w.innerHTML=`<span class="key-note">${NOTES[semi]}</span>`; kb.appendChild(w); wIdx++; });
+    BLACK_POS.forEach((pos,i)=>{ const semi=BLACK[i%BLACK.length]; if(semi>=12)return; const midi=(synOct+oct)*12+semi, b=document.createElement('div'); b.className='key-b key-el'; b.dataset.midi=midi; b.style.left=((wIdx-7+pos)*44+2)+'px'; kb.appendChild(b); });
   }
 }
 function setOct(d){ synOct=Math.max(1,Math.min(7,synOct+d)); document.getElementById('oct-lbl').textContent='Oct '+synOct; buildKeyboard(); }
 
-// Advanced Touch Handler (Glissando + Drag Down to Latch)
-const kbd = document.getElementById('keyboard');
-let activePointers = {}; // pointerId -> {midi, startY, latched}
-let latchedMidis = new Set(); // Globally latched keys
-
-function getMidiFromPoint(x, y) {
-  const els = document.elementsFromPoint(x, y);
-  for(let el of els) { if(el.classList.contains('key-el')) return el.dataset.midi; }
-  return null;
-}
-
-function kbdDown(e) {
-  e.preventDefault(); const c = getAC(); getMasterAn(c); // Wake audio
-  Array.from(e.changedTouches || [e]).forEach(t => {
-    const midi = getMidiFromPoint(t.clientX, t.clientY);
-    if(midi) {
-      if(latchedMidis.has(midi)) {
-        // Tapping a latched key turns it off
-        latchedMidis.delete(midi);
-        noteOff(midi);
-        return;
-      }
-      activePointers[t.identifier || 0] = {midi: midi, startY: t.clientY, latched: false};
-      noteOn(midi);
-    }
-  });
-}
-
-function kbdMove(e) {
-  e.preventDefault();
-  Array.from(e.changedTouches || [e]).forEach(t => {
-    const id = t.identifier || 0;
-    const ptr = activePointers[id];
-    if(!ptr) return;
-    
-    // Check Y axis for "Drag Down Latch"
-    if(!ptr.latched && (t.clientY - ptr.startY > 40)) {
-      ptr.latched = true;
-      latchedMidis.add(ptr.midi);
-      const el = document.querySelector(`[data-midi="${ptr.midi}"]`);
-      if(el) el.classList.add('latched');
-      FB('Sustain Ativado (Latch)', '#4FC3F7');
-    }
-
-    // Check X axis for Glissando (only if not latched vertically)
-    const newMidi = getMidiFromPoint(t.clientX, t.clientY);
-    if(newMidi && newMidi !== ptr.midi && !ptr.latched) {
-      noteOff(ptr.midi); // Turn off old
-      ptr.midi = newMidi; // Update reference
-      ptr.startY = t.clientY; // Reset Y threshold for new key
-      noteOn(newMidi);    // Turn on new
-    }
-  });
-}
-
-function kbdUp(e) {
-  e.preventDefault();
-  Array.from(e.changedTouches || [e]).forEach(t => {
-    const id = t.identifier || 0;
-    const ptr = activePointers[id];
-    if(ptr) {
-      // Only send noteOff if the key wasn't dragged down to latch
-      if(!latchedMidis.has(ptr.midi)) noteOff(ptr.midi);
-      delete activePointers[id];
-    }
-  });
-}
-
-kbd.addEventListener('touchstart', kbdDown, {passive: false});
-kbd.addEventListener('touchmove', kbdMove, {passive: false});
-kbd.addEventListener('touchend', kbdUp);
-kbd.addEventListener('touchcancel', kbdUp);
+const kbd = document.getElementById('keyboard'); let activePointers = {}, latchedMidis = new Set();
+function getMidiFromPoint(x, y) { for(let el of document.elementsFromPoint(x, y)) { if(el.classList.contains('key-el')) return el.dataset.midi; } return null; }
+kbd.addEventListener('touchstart', (e)=>{ e.preventDefault(); getMasterAn(getAC()); Array.from(e.changedTouches).forEach(t => { const m = getMidiFromPoint(t.clientX, t.clientY); if(m){ if(latchedMidis.has(m)){ latchedMidis.delete(m); noteOff(m); return; } activePointers[t.identifier||0]={midi:m,startY:t.clientY,latched:false}; noteOn(m); } }); }, {passive: false});
+kbd.addEventListener('touchmove', (e)=>{ e.preventDefault(); Array.from(e.changedTouches).forEach(t => { const ptr=activePointers[t.identifier||0]; if(!ptr)return; if(!ptr.latched && (t.clientY-ptr.startY>40)){ ptr.latched=true; latchedMidis.add(ptr.midi); const el=document.querySelector(`[data-midi="${ptr.midi}"]`); if(el)el.classList.add('latched'); } const nM=getMidiFromPoint(t.clientX, t.clientY); if(nM && nM!==ptr.midi && !ptr.latched){ noteOff(ptr.midi); ptr.midi=nM; ptr.startY=t.clientY; noteOn(nM); } }); }, {passive: false});
+kbd.addEventListener('touchend', (e)=>{ e.preventDefault(); Array.from(e.changedTouches).forEach(t => { const ptr=activePointers[t.identifier||0]; if(ptr){ if(!latchedMidis.has(ptr.midi)) noteOff(ptr.midi); delete activePointers[t.identifier||0]; } }); });
+kbd.addEventListener('touchcancel', (e)=>{ e.preventDefault(); Array.from(e.changedTouches).forEach(t => { const ptr=activePointers[t.identifier||0]; if(ptr){ if(!latchedMidis.has(ptr.midi)) noteOff(ptr.midi); delete activePointers[t.identifier||0]; } }); });
 
 function noteOn(midi){
-  if(synVoices[midi]) return;
-  const c=AC;
-  if(!synFilter){ synFilter=c.createBiquadFilter(); synFilter.type=synFType; synFilter.frequency.value=logF(+document.getElementById('s-cut').value,20,20000); synMaster=c.createGain(); synFilter.connect(synMaster); synMaster.connect(masterAn); }
-  
-  const f=440*Math.pow(2,(midi-69)/12);
-  const a=+document.getElementById('s-a').value/1000, d=+document.getElementById('s-d').value/1000, s=+document.getElementById('s-s').value/100;
-  
-  const o1=c.createOscillator(), env=c.createGain();
-  o1.type=synWave1; o1.frequency.value=f;
-  env.gain.setValueAtTime(0,c.currentTime); env.gain.linearRampToValueAtTime(.4,c.currentTime+a); env.gain.linearRampToValueAtTime(s*.4,c.currentTime+a+d);
-  
-  o1.connect(env); env.connect(synFilter); o1.start();
-  synVoices[midi]={o1, env};
-  const el=document.querySelector(`[data-midi="${midi}"]`); if(el) el.classList.add('on');
-  document.getElementById('syn-voices').textContent=Object.keys(synVoices).length+' vozes';
+  if(synVoices[midi]) return; const c=AC; if(!synFilter){ synFilter=c.createBiquadFilter(); synFilter.type=synFType; synFilter.frequency.value=logF(+document.getElementById('s-cut').value,20,20000); synMaster=c.createGain(); synFilter.connect(synMaster); synMaster.connect(masterAn); }
+  const a=+document.getElementById('s-a').value/1000, d=+document.getElementById('s-d').value/1000, s=+document.getElementById('s-s').value/100, o1=c.createOscillator(), env=c.createGain();
+  o1.type=synWave1; o1.frequency.value=440*Math.pow(2,(midi-69)/12); env.gain.setValueAtTime(0,c.currentTime); env.gain.linearRampToValueAtTime(.4,c.currentTime+a); env.gain.linearRampToValueAtTime(s*.4,c.currentTime+a+d);
+  o1.connect(env); env.connect(synFilter); o1.start(); synVoices[midi]={o1, env}; const el=document.querySelector(`[data-midi="${midi}"]`); if(el) el.classList.add('on'); document.getElementById('syn-voices').textContent=Object.keys(synVoices).length+' vozes';
 }
-
 function noteOff(midi){
-  const v=synVoices[midi]; if(!v || !AC) return;
-  const r=+document.getElementById('s-r').value/1000;
+  const v=synVoices[midi]; if(!v || !AC) return; const r=+document.getElementById('s-r').value/1000;
   v.env.gain.cancelScheduledValues(AC.currentTime); v.env.gain.setValueAtTime(v.env.gain.value, AC.currentTime); v.env.gain.linearRampToValueAtTime(0, AC.currentTime+r);
   setTimeout(()=>{ try{v.o1.stop();}catch(e){} delete synVoices[midi]; const el=document.querySelector(`[data-midi="${midi}"]`); if(el){ el.classList.remove('on'); el.classList.remove('latched'); } document.getElementById('syn-voices').textContent=Object.keys(synVoices).length+' vozes'; }, (r+.05)*1000);
 }
-
-function panicSynth(){
-  Object.keys(synVoices).forEach(noteOff);
-  latchedMidis.clear();
-  document.querySelectorAll('.key-el').forEach(k=>{k.classList.remove('on'); k.classList.remove('latched');});
-}
+function panicSynth(){ Object.keys(synVoices).forEach(noteOff); latchedMidis.clear(); document.querySelectorAll('.key-el').forEach(k=>{k.classList.remove('on'); k.classList.remove('latched');}); }
 function setSO(n,t){ synWave1=t; document.querySelectorAll('[id^=so1-]').forEach(b=>b.classList.remove('on')); document.getElementById('so1-'+t).classList.add('on'); }
-function updateSynth(){ if(synFilter){ synFilter.frequency.setTargetAtTime(logF(+document.getElementById('s-cut').value,20,20000), AC.currentTime, .02); } }
+function updateSynth(){ if(synFilter) synFilter.frequency.setTargetAtTime(logF(+document.getElementById('s-cut').value,20,20000), AC.currentTime, .02); }
 
 // ═══════════════════════ GROOVE (DRUMS + ARP) ═══════════════════════
-const steps = 16;
-let seqGrid = { kick: Array(steps).fill(false), snare: Array(steps).fill(false), hat: Array(steps).fill(false) };
-let arpGrid = Array(steps).fill(-1); // -1 = rest, else midi offset
-let isSeqPlaying = false, isArpOn = false, bpm = 120, currentStep = 0, nextNoteTime = 0, seqTimerID = null;
+const steps=16; let seqGrid={kick:Array(steps).fill(false),snare:Array(steps).fill(false),hat:Array(steps).fill(false)}, arpGrid=Array(steps).fill(-1);
+let isSeqPlaying=false, isArpOn=false, bpm=120, currentStep=0, nextNoteTime=0, seqTimerID=null;
+['kick','snare','hat'].forEach(inst => { const g = document.getElementById('grid-'+inst); for(let i=0; i<steps; i++) { let c = document.createElement('div'); c.className = 'seq-cell'; if(i%4===0) c.style.borderLeft = '1px solid var(--amber)'; c.onclick = () => { seqGrid[inst][i] = !seqGrid[inst][i]; c.classList.toggle('on', seqGrid[inst][i]); }; g.appendChild(c); } });
+const arpG=document.getElementById('grid-arp'); for(let i=0; i<steps; i++){ let c=document.createElement('div'); c.className='seq-cell'; arpG.appendChild(c); }
+function updateBPM(v){ bpm=parseInt(v); document.getElementById('bpm-val').textContent=bpm; }
+function clearDrums(){ ['kick','snare','hat'].forEach(i=>{ seqGrid[i].fill(false); Array.from(document.getElementById('grid-'+i).children).forEach(c=>c.classList.remove('on')); }); }
+function nextNote(){ nextNoteTime += 0.25 * (60.0 / bpm); currentStep = (currentStep + 1) % steps; }
+function scheduleStep(){ while(nextNoteTime < AC.currentTime + 0.1) { if(seqGrid.kick[currentStep]) playKick(nextNoteTime); if(seqGrid.snare[currentStep]) playSnare(nextNoteTime); if(seqGrid.hat[currentStep]) playHat(nextNoteTime); if(isArpOn) playArpStep(currentStep, nextNoteTime); const s = currentStep; setTimeout(() => { document.querySelectorAll('.seq-cell').forEach(el=>el.classList.remove('active')); ['kick','snare','hat','arp'].forEach(i => { const ch = document.getElementById('grid-'+i).children[s]; if(ch) ch.classList.add('active'); }); }, (nextNoteTime - AC.currentTime)*1000); nextNote(); } seqTimerID = setTimeout(scheduleStep, 25); }
+function toggleSeq(forceState){ isSeqPlaying = forceState !== undefined ? forceState : !isSeqPlaying; const btn = document.getElementById('btn-seq-play'); btn.textContent = isSeqPlaying ? '■ STOP' : '▶ PLAY'; btn.className = isSeqPlaying ? 'btn btn-r btn-sm' : 'btn btn-a btn-sm'; if(isSeqPlaying) { if(!AC) getAC(); else if(AC.state==='suspended') AC.resume(); getMasterAn(AC); currentStep = 0; nextNoteTime = AC.currentTime + 0.05; scheduleStep(); } else { clearTimeout(seqTimerID); document.querySelectorAll('.seq-cell').forEach(el=>el.classList.remove('active')); } }
+function playKick(t){ const o=AC.createOscillator(),g=AC.createGain(); o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(0.01,t+0.5); g.gain.setValueAtTime(1,t); g.gain.exponentialRampToValueAtTime(0.01,t+0.5); o.connect(g); g.connect(masterAn); o.start(t); o.stop(t+0.5); }
+function playSnare(t){ const o=AC.createOscillator(),g=AC.createGain(),n=AC.createBufferSource(),ng=AC.createGain(); o.type='triangle'; o.frequency.setValueAtTime(250,t); g.gain.setValueAtTime(0.7,t); g.gain.exponentialRampToValueAtTime(0.01,t+0.2); const bs=AC.createBuffer(1,AC.sampleRate*0.2,AC.sampleRate), dt=bs.getChannelData(0); for(let i=0;i<dt.length;i++) dt[i]=Math.random()*2-1; n.buffer=bs; ng.gain.setValueAtTime(0.5,t); ng.gain.exponentialRampToValueAtTime(0.01,t+0.2); o.connect(g); n.connect(ng); g.connect(masterAn); ng.connect(masterAn); o.start(t); n.start(t); o.stop(t+0.2); n.stop(t+0.2); }
+function playHat(t){ const n=AC.createBufferSource(),g=AC.createGain(),f=AC.createBiquadFilter(); const bs=AC.createBuffer(1,AC.sampleRate*0.1,AC.sampleRate), dt=bs.getChannelData(0); for(let i=0;i<dt.length;i++) dt[i]=Math.random()*2-1; n.buffer=bs; f.type='highpass'; f.frequency.value=7000; g.gain.setValueAtTime(0.5,t); g.gain.exponentialRampToValueAtTime(0.01,t+0.05); n.connect(f); f.connect(g); g.connect(masterAn); n.start(t); n.stop(t+0.1); }
+function toggleArp(force){ isArpOn = force !== undefined ? force : !isArpOn; document.getElementById('btn-arp').textContent = isArpOn?'ON':'OFF'; document.getElementById('btn-arp').className = isArpOn?'chip chip-xs on':'chip chip-xs'; if(isArpOn && !isSeqPlaying) toggleSeq(); }
+function randomizeArp(){ const pentatonic=[0,2,4,7,9,12,14,16]; for(let i=0; i<steps; i++) { arpGrid[i] = Math.random() > 0.4 ? pentatonic[Math.floor(Math.random()*pentatonic.length)] : -1; document.getElementById('grid-arp').children[i].classList.toggle('on', arpGrid[i] !== -1); } if(!isArpOn) toggleArp(true); }
+function clearArp(){ arpGrid.fill(-1); Array.from(document.getElementById('grid-arp').children).forEach(c=>c.classList.remove('on')); }
+function playArpStep(step, t){ if(arpGrid[step]===-1)return; if(!synFilter){ synFilter=AC.createBiquadFilter(); synFilter.type=synFType; synFilter.frequency.value=logF(+document.getElementById('s-cut').value,20,20000); synMaster=AC.createGain(); synFilter.connect(synMaster); synMaster.connect(masterAn); } const o=AC.createOscillator(), env=AC.createGain(); o.type=synWave1; o.frequency.value=440*Math.pow(2,((synOct*12+arpGrid[step])-69)/12); env.gain.setValueAtTime(0,t); env.gain.linearRampToValueAtTime(0.3,t+0.02); env.gain.exponentialRampToValueAtTime(0.01,t+0.2); o.connect(env); env.connect(synFilter); o.start(t); o.stop(t+0.3); }
 
-// Build UI Grids
-['kick','snare','hat'].forEach(inst => {
-  const g = document.getElementById('grid-'+inst);
-  for(let i=0; i<steps; i++) {
-    let c = document.createElement('div'); c.className = 'seq-cell';
-    if(i%4===0) c.style.borderLeft = '1px solid var(--amber)';
-    c.onclick = () => { seqGrid[inst][i] = !seqGrid[inst][i]; c.classList.toggle('on', seqGrid[inst][i]); };
-    g.appendChild(c);
-  }
-});
-const arpG = document.getElementById('grid-arp');
-for(let i=0; i<steps; i++){ let c=document.createElement('div'); c.className='seq-cell'; arpG.appendChild(c); }
-
-function updateBPM(v) { bpm = parseInt(v); document.getElementById('bpm-val').textContent = bpm; }
-function clearDrums() { ['kick','snare','hat'].forEach(i=>{ seqGrid[i].fill(false); Array.from(document.getElementById('grid-'+i).children).forEach(c=>c.classList.remove('on')); }); }
-
-function nextNote() {
-  const secPerBeat = 60.0 / bpm;
-  nextNoteTime += 0.25 * secPerBeat; // 16th note
-  currentStep = (currentStep + 1) % steps;
+// ═══════════════════════ FREQ QUIZ RESTAURADA ═══════════════════════
+const BANDS = [ {l:'Sub (20–60 Hz)',lo:20,hi:60}, {l:'Grave (60–120 Hz)',lo:60,hi:120}, {l:'Grave-Méd (120–250)',lo:120,hi:250}, {l:'Boxy/Mud (250–500)',lo:250,hi:500}, {l:'Nasal (500Hz–1k)',lo:500,hi:1000}, {l:'Mordida (1–2 kHz)',lo:1000,hi:2000}, {l:'Presença (2–5 kHz)',lo:2000,hi:5000}, {l:'Sibilância (5–10k)',lo:5000,hi:10000}, {l:'Brilho/Ar (10–20k)',lo:10000,hi:20000} ];
+let qRange='full', qF=0, qCorr=0, scR=0, scT=0, qStreak=[], qOsc=null;
+function setQRange(r){ qRange=r; document.querySelectorAll('[id^=qr-]').forEach(b=>b.classList.remove('on')); document.getElementById('qr-'+r).classList.add('on'); qNext(); }
+function getActiveBands(){ const ranges={full:[20,20000],mid:[200,8000],fb:[500,1000],hi:[2000,20000]}; const [lo,hi]=ranges[qRange]||[20,20000]; return BANDS.filter(b=>b.hi>lo&&b.lo<hi); }
+function qNext(){
+  stopQTone(); const bands=getActiveBands(); if(bands.length<2)return;
+  qCorr=Math.floor(Math.random()*bands.length); qF=Math.round(Math.pow(10,Math.log10(bands[qCorr].lo)+Math.random()*(Math.log10(bands[qCorr].hi)-Math.log10(bands[qCorr].lo))));
+  let opts=new Set([qCorr]); while(opts.size<Math.min(4,bands.length)) opts.add(Math.floor(Math.random()*bands.length)); opts=Array.from(opts).sort(()=>Math.random()-.5);
+  const container=document.getElementById('q-opts'); container.innerHTML='';
+  opts.forEach(idx=>{ const b=document.createElement('button'); b.className='opt'; b.textContent=bands[idx].l; b.onclick=()=>qAnswer(idx===qCorr,b,opts,bands,qCorr,container); container.appendChild(b); });
+  document.getElementById('q-play').onclick = () => { stopQTone(); const c=getAC(); qOsc=c.createOscillator(); const g=c.createGain(); qOsc.frequency.value=qF; qOsc.type='sine'; g.gain.setValueAtTime(0,c.currentTime); g.gain.linearRampToValueAtTime(.4,c.currentTime+.03); g.gain.setValueAtTime(.4,c.currentTime+1.4); g.gain.linearRampToValueAtTime(0,c.currentTime+1.5); qOsc.connect(g); g.connect(getMasterAn(c)); qOsc.start(); qOsc.stop(c.currentTime+1.55); };
 }
-
-function scheduleStep() {
-  while(nextNoteTime < AC.currentTime + 0.1) {
-    playDrumStep(currentStep, nextNoteTime);
-    if(isArpOn) playArpStep(currentStep, nextNoteTime);
-    
-    // UI Update (setTimeout is fine for visual sync)
-    const s = currentStep;
-    setTimeout(() => {
-      document.querySelectorAll('.seq-cell').forEach(el=>el.classList.remove('active'));
-      ['kick','snare','hat','arp'].forEach(i => { const ch = document.getElementById('grid-'+i).children[s]; if(ch) ch.classList.add('active'); });
-    }, (nextNoteTime - AC.currentTime)*1000);
-    
-    nextNote();
-  }
-  seqTimerID = setTimeout(scheduleStep, 25);
+function stopQTone(){ if(qOsc){try{qOsc.stop();}catch(e){} qOsc=null;} }
+function qAnswer(correct, btn, opts, bands, corrIdx, container){
+  scT++; qStreak.push(correct); if(qStreak.length>10) qStreak.shift();
+  if(correct){ scR++; btn.classList.add('ok'); FB('✓ Correto!','#00FF88'); } else { btn.classList.add('ng'); container.querySelectorAll('.opt').forEach((b,i)=>{ if(opts[i]===corrIdx) b.classList.add('ok'); }); FB('✗ Errado','#FF3B30'); }
+  document.getElementById('sc-r').textContent=scR; document.getElementById('sc-t').textContent=scT; document.getElementById('sc-p').textContent=Math.round(scR/scT*100)+'%';
+  document.getElementById('streak-row').innerHTML=qStreak.map(h=>`<span class="pip ${h?'h':'m'}"></span>`).join('');
+  container.querySelectorAll('.opt').forEach(b=>b.style.pointerEvents='none'); setTimeout(qNext, 1800);
 }
-
-function toggleSeq(forceState) {
-  isSeqPlaying = forceState !== undefined ? forceState : !isSeqPlaying;
-  const btn = document.getElementById('btn-seq-play');
-  btn.textContent = isSeqPlaying ? '■ STOP' : '▶ PLAY'; btn.className = isSeqPlaying ? 'btn btn-r btn-sm' : 'btn btn-a btn-sm';
-  if(isSeqPlaying) {
-    if(!AC) getAC(); else if(AC.state==='suspended') AC.resume();
-    getMasterAn(AC);
-    currentStep = 0; nextNoteTime = AC.currentTime + 0.05;
-    scheduleStep();
-  } else { clearTimeout(seqTimerID); document.querySelectorAll('.seq-cell').forEach(el=>el.classList.remove('active')); }
-}
-
-// Synth Drums
-function playDrumStep(step, time) {
-  if(seqGrid.kick[step]) playKick(time);
-  if(seqGrid.snare[step]) playSnare(time);
-  if(seqGrid.hat[step]) playHat(time);
-}
-function playKick(t) {
-  const o = AC.createOscillator(), g = AC.createGain();
-  o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(0.01, t + 0.5);
-  g.gain.setValueAtTime(1, t); g.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
-  o.connect(g); g.connect(masterAn); o.start(t); o.stop(t+0.5);
-}
-function playSnare(t) {
-  const o = AC.createOscillator(), g = AC.createGain(), n = AC.createBufferSource(), ng = AC.createGain();
-  o.type = 'triangle'; o.frequency.setValueAtTime(250, t); g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
-  const bs = AC.createBuffer(1, AC.sampleRate*0.2, AC.sampleRate), dt = bs.getChannelData(0);
-  for(let i=0; i<dt.length; i++) dt[i] = Math.random()*2-1;
-  n.buffer = bs; ng.gain.setValueAtTime(0.5, t); ng.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
-  o.connect(g); n.connect(ng); g.connect(masterAn); ng.connect(masterAn);
-  o.start(t); n.start(t); o.stop(t+0.2); n.stop(t+0.2);
-}
-function playHat(t) {
-  const n = AC.createBufferSource(), g = AC.createGain(), f = AC.createBiquadFilter();
-  const bs = AC.createBuffer(1, AC.sampleRate*0.1, AC.sampleRate), dt = bs.getChannelData(0);
-  for(let i=0; i<dt.length; i++) dt[i] = Math.random()*2-1;
-  n.buffer = bs; f.type = 'highpass'; f.frequency.value = 7000;
-  g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
-  n.connect(f); f.connect(g); g.connect(masterAn); n.start(t); n.stop(t+0.1);
-}
-
-// Arpeggiator
-function toggleArp(force) { isArpOn = force !== undefined ? force : !isArpOn; document.getElementById('btn-arp').textContent = isArpOn?'ON':'OFF'; document.getElementById('btn-arp').className = isArpOn?'chip chip-xs on':'chip chip-xs'; if(isArpOn && !isSeqPlaying) toggleSeq(); }
-function randomizeArp() {
-  const pentatonic = [0, 2, 4, 7, 9, 12, 14, 16]; // Major Penta steps
-  for(let i=0; i<steps; i++) {
-    arpGrid[i] = Math.random() > 0.4 ? pentatonic[Math.floor(Math.random()*pentatonic.length)] : -1;
-    const cell = document.getElementById('grid-arp').children[i];
-    cell.classList.toggle('on', arpGrid[i] !== -1);
-  }
-  if(!isArpOn) toggleArp(true);
-}
-function clearArp() { arpGrid.fill(-1); Array.from(document.getElementById('grid-arp').children).forEach(c=>c.classList.remove('on')); }
-function playArpStep(step, time) {
-  if(arpGrid[step] === -1) return;
-  const baseMidi = synOct * 12; // C root of current octave
-  const midi = baseMidi + arpGrid[step];
-  
-  if(!synFilter){ synFilter=AC.createBiquadFilter(); synFilter.type=synFType; synFilter.frequency.value=logF(+document.getElementById('s-cut').value,20,20000); synMaster=AC.createGain(); synFilter.connect(synMaster); synMaster.connect(masterAn); }
-  const o = AC.createOscillator(), env = AC.createGain();
-  o.type = synWave1; o.frequency.value = 440*Math.pow(2,(midi-69)/12);
-  env.gain.setValueAtTime(0, time); env.gain.linearRampToValueAtTime(0.3, time+0.02); env.gain.exponentialRampToValueAtTime(0.01, time+0.2);
-  o.connect(env); env.connect(synFilter); o.start(time); o.stop(time+0.3);
-}
+qNext();
 
 // Init
 setTimeout(buildKeyboard, 200);
